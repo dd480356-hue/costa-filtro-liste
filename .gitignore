@@ -1,0 +1,6 @@
+# Ne versionner QUE l'app et les guides. Tout le reste (données PII) ignoré.
+*
+!index.html
+!*.md
+!*.sql
+!.gitignore
