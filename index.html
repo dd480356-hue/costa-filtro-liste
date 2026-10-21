@@ -3665,10 +3665,11 @@ const GEN = (() => {
     cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; });
   }
   function computeEngine(recs) {
-    for (const r of recs) { r.assistenza = false; r.turnoPax = r.pax; r.turnoLead = true;
+    const auto = recs.filter(r => !r.manual);  // le righe modificate a mano non vengono ricalcolate
+    for (const r of auto) { r.assistenza = false; r.turnoPax = r.pax; r.turnoLead = true;
       r.turnoStart = r.std || ''; r.turnoEnd = r.std || ''; r.inizioTurno = ''; r.convocazione = ''; r.fineTurno = ''; r.sbarco = ''; r.note = ''; }
     const groups = new Map();
-    for (const r of recs) { const g = r.data + '|' + String(r.scalo).toUpperCase() + '|' + r.sens + '|' + (r.modo || '');
+    for (const r of auto) { const g = r.data + '|' + String(r.scalo).toUpperCase() + '|' + r.sens + '|' + (r.modo || '');
       if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
     for (const arr of groups.values()) {
       arr.sort((a, b) => ((toMin(a.std) ?? 1e9) - (toMin(b.std) ?? 1e9)));
@@ -3683,7 +3684,7 @@ const GEN = (() => {
       for (const cluster of clusters) { if (flightCfg) computeFlights(cluster, flightCfg); else computeNavi(cluster, sens); }
     }
     // FINE TURNO ADDETTO: non si conosce ancora → sempre vuota (compilata a mano).
-    for (const r of recs) { r.fineTurno = ''; r.turnoEnd = ''; }
+    for (const r of auto) { r.fineTurno = ''; r.turnoEnd = ''; }
   }
   async function recomputeAll() { ALL = await dbAll(); computeEngine(ALL); }
 
@@ -3928,6 +3929,50 @@ const GEN = (() => {
   }
 
   // ---- Rendu onglet ----
+  function genKeyOf(r) { return [r.data || '', String(r.nave || '').toUpperCase(), String(r.scalo || '').toUpperCase(), String(r.volo || '').toUpperCase(), r.sens || 'A'].join('|'); }
+  // Editor di una riga del generale (modifica a mano) / nuova riga.
+  function openGenEditor(rec, isNew) {
+    const r = Object.assign({ data: '', sens: 'A', modo: '', nave: '', scalo: '', volo: '', std: '', pax: 0, convocazione: '', inizioTurno: '', fineTurno: '', note: '', assistenza: false, passeggeri: [] }, rec);
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(13,34,56,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    const inp = (lbl, id, val, type) => `<label style="font-size:11px;font-weight:600;color:var(--ink-soft)">${lbl}<br><input id="ge-${id}" type="${type || 'text'}" value="${escapeHtml(val == null ? '' : String(val))}" style="width:100%;margin-top:3px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit"></label>`;
+    ov.innerHTML = `<div style="background:var(--bg);border-radius:16px;max-width:620px;width:100%;max-height:88vh;overflow:auto;padding:22px;box-shadow:0 30px 70px -30px rgba(13,34,56,.6)">
+      <h2 style="font-family:var(--d-disp,inherit);font-size:18px;color:var(--blue-darker);margin-bottom:14px">${isNew ? 'Nuova riga' : 'Modifica riga'}</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        ${inp('Data (AAAA-MM-GG)', 'data', r.data)}
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft)">A/P<br><select id="ge-sens" style="width:100%;margin-top:3px;padding:7px;border:1px solid var(--line);border-radius:8px"><option value="A" ${r.sens === 'A' ? 'selected' : ''}>A — Arrivo (imbarco)</option><option value="P" ${r.sens === 'P' ? 'selected' : ''}>P — Partenza (sbarco)</option></select></label>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft)">Metier<br><select id="ge-modo" style="width:100%;margin-top:3px;padding:7px;border:1px solid var(--line);border-radius:8px"><option value="" ${!r.modo ? 'selected' : ''}>—</option><option ${r.modo === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${r.modo === 'CHARTER' ? 'selected' : ''}>CHARTER</option><option ${r.modo === 'NORMALE' ? 'selected' : ''}>NORMALE</option></select></label>
+        ${inp('Nave', 'nave', r.nave)}${inp('Scalo', 'scalo', r.scalo)}${inp('Volo', 'volo', r.volo)}
+        ${inp('STD', 'std', r.std)}${inp('PAX', 'pax', r.pax, 'number')}
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft)">Assistenza<br><select id="ge-assist" style="width:100%;margin-top:3px;padding:7px;border:1px solid var(--line);border-radius:8px"><option value="1" ${r.assistenza ? 'selected' : ''}>SÌ</option><option value="0" ${!r.assistenza ? 'selected' : ''}>—</option></select></label>
+        ${inp('Inizio turno', 'inizio', r.inizioTurno)}${inp('Convocazione', 'conv', r.convocazione)}${inp('Fine turno', 'fine', r.fineTurno)}
+      </div>
+      ${inp('Nota', 'note', r.note)}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:10px">
+        <div>${isNew ? '' : '<button class="clear-all-btn" id="ge-del" style="color:var(--ko);border-color:var(--ko)">Elimina riga</button>'}</div>
+        <div style="display:flex;gap:8px"><button class="clear-all-btn" id="ge-cancel">Annulla</button><button class="browse" id="ge-save" style="margin:0">Salva</button></div>
+      </div>
+      <div style="font-size:10px;color:var(--ink-mute);margin-top:8px">Una riga modificata a mano non viene più ricalcolata dalle regole.</div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => document.body.removeChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.querySelector('#ge-cancel').addEventListener('click', close);
+    const delBtn = ov.querySelector('#ge-del');
+    if (delBtn) delBtn.addEventListener('click', async () => { await dbDel(rec.key); close(); await recomputeAll(); render(); });
+    ov.querySelector('#ge-save').addEventListener('click', async () => {
+      const g = id => ov.querySelector('#ge-' + id);
+      const n2 = { ...r, manual: true,
+        data: g('data').value.trim(), sens: g('sens').value, modo: g('modo').value,
+        nave: g('nave').value.trim(), scalo: g('scalo').value.trim().toUpperCase(), volo: g('volo').value.trim(),
+        std: g('std').value.trim(), pax: +g('pax').value || 0, assistenza: g('assist').value === '1',
+        inizioTurno: g('inizio').value.trim(), convocazione: g('conv').value.trim(), fineTurno: g('fine').value.trim(),
+        note: g('note').value.trim(), turnoLead: true, turnoPax: +g('pax').value || 0 };
+      n2.key = genKeyOf(n2);
+      if (!isNew && n2.key !== rec.key) await dbDel(rec.key);
+      await dbPut(n2); close(); await recomputeAll(); render();
+    });
+  }
   let GENF = { q: '', scalo: '', nave: '', assist: '' };
   function genFiltered() {
     const q = GENF.q.trim().toLowerCase();
@@ -3940,7 +3985,8 @@ const GEN = (() => {
       a.sens.localeCompare(b.sens) || ((toMin(a.std) ?? 1e9) - (toMin(b.std) ?? 1e9)));
   }
   function genRowHtml(r) {
-    return `<tr style="border-bottom:1px solid var(--line-soft);${r.assistenza ? 'background:var(--yellow-tint)' : ''}">
+    return `<tr data-key="${escapeHtml(r.key || '')}" style="cursor:pointer;border-bottom:1px solid var(--line-soft);${r.assistenza ? 'background:var(--yellow-tint)' : ''}">
+      <td style="padding:5px 6px;width:16px;text-align:center;color:var(--ink-mute)">${r.manual ? '✎' : ''}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.data)}</td>
       <td style="padding:5px 8px;font-size:11px;color:var(--ink-mute)">${escapeHtml(r.modo || '')}</td>
       <td style="padding:5px 8px;font-size:12px;white-space:nowrap">${r.sens === 'P'
@@ -3964,13 +4010,15 @@ const GEN = (() => {
     const rows = genFiltered();
     box.innerHTML = `<div class="result-card" style="padding:0;overflow:hidden"><div class="table-wrap" style="max-height:60vh;overflow:auto">
       <table style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:var(--bg-soft);text-align:left;font-size:11px;color:var(--ink-mute)">
-        <th style="padding:7px 8px">DATA</th><th style="padding:7px 8px">METIER</th><th style="padding:7px 8px">A/P</th><th style="padding:7px 8px">NAVE</th>
+        <th style="padding:7px 6px;width:16px"></th><th style="padding:7px 8px">DATA</th><th style="padding:7px 8px">METIER</th><th style="padding:7px 8px">A/P</th><th style="padding:7px 8px">NAVE</th>
         <th style="padding:7px 8px">SCALO</th><th style="padding:7px 8px">VOLO</th><th style="padding:7px 8px;text-align:right">STD</th>
         <th style="padding:7px 8px;text-align:right">PAX</th><th style="padding:7px 8px;text-align:right">PAX TURNO</th>
         <th style="padding:7px 8px;text-align:center">INIZIO</th><th style="padding:7px 8px;text-align:center">CONVOC</th><th style="padding:7px 8px;text-align:center">FINE</th>
         <th style="padding:7px 8px;text-align:center">ASS.</th><th style="padding:7px 8px">STATO / NOTA</th></tr></thead>
       <tbody>${rows.map(genRowHtml).join('')}</tbody></table></div></div>
-      <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">${rows.length} righe mostrate${rows.length !== ALL.length ? ' (su ' + ALL.length + ')' : ''}</div>`;
+      <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">${rows.length} righe mostrate${rows.length !== ALL.length ? ' (su ' + ALL.length + ')' : ''} · clicca una riga per modificarla</div>`;
+    const tb = box.querySelector('tbody');
+    if (tb) tb.addEventListener('click', e => { const tr = e.target.closest('tr[data-key]'); if (!tr) return; const rec = ALL.find(x => x.key === tr.dataset.key); if (rec) openGenEditor(rec, false); });
   }
   function render() {
     const el = document.getElementById('gen-results'); if (!el) return;
@@ -3988,8 +4036,10 @@ const GEN = (() => {
         <select id="gf-scalo" aria-label="Filtro scalo"><option value="">Tutti gli scali</option>${scaliOpts.map(s => `<option ${GENF.scalo === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
         <select id="gf-nave" aria-label="Filtro nave"><option value="">Tutte le navi</option>${naveOpts.map(s => `<option ${GENF.nave === s ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select>
         <select id="gf-assist" aria-label="Filtro assistenza"><option value="">Assistenza: tutte</option><option value="yes" ${GENF.assist === 'yes' ? 'selected' : ''}>Solo con assistenza</option><option value="no" ${GENF.assist === 'no' ? 'selected' : ''}>Solo senza</option></select>
+        <button id="gen-addrow" class="browse" style="white-space:nowrap">+ Riga</button>
       </div>
       <div id="gen-tablebox"></div>`;
+    el.querySelector('#gen-addrow').addEventListener('click', () => openGenEditor({ data: new Date().toISOString().slice(0, 10) }, true));
     const q = el.querySelector('#gf-q');
     q.addEventListener('input', () => { GENF.q = q.value; renderGenTable(); });
     el.querySelector('#gf-scalo').addEventListener('change', e => { GENF.scalo = e.target.value; renderGenTable(); });
