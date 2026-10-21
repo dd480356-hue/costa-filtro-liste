@@ -3996,6 +3996,49 @@ const GEN = (() => {
       await dbPut(n2); close(); await recomputeAll(); render();
     });
   }
+  // Vista completa editabile in linea (tutto il generale, modifica diretta nelle celle)
+  function openFullEditor() {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9998;display:flex;flex-direction:column';
+    const cell = (f, val, type) => `<input data-f="${f}" type="${type || 'text'}" value="${escapeHtml(val == null ? '' : String(val))}" style="width:100%;padding:5px 6px;border:1px solid transparent;border-radius:6px;font-family:inherit;font-size:12px;background:transparent">`;
+    const selSens = v => `<select data-f="sens" style="padding:5px;border:1px solid transparent;border-radius:6px;font-size:12px;background:transparent"><option value="A" ${v === 'A' ? 'selected' : ''}>A</option><option value="P" ${v === 'P' ? 'selected' : ''}>P</option></select>`;
+    const selModo = v => `<select data-f="modo" style="padding:5px;border:1px solid transparent;border-radius:6px;font-size:12px;background:transparent"><option value="" ${!v ? 'selected' : ''}>—</option><option ${v === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${v === 'CHARTER' ? 'selected' : ''}>CHARTER</option><option ${v === 'NORMALE' ? 'selected' : ''}>NORMALE</option></select>`;
+    const selAss = v => `<select data-f="assistenza" style="padding:5px;border:1px solid transparent;border-radius:6px;font-size:12px;background:transparent"><option value="1" ${v ? 'selected' : ''}>SÌ</option><option value="0" ${!v ? 'selected' : ''}>—</option></select>`;
+    const rowHtml = r => `<tr data-key="${escapeHtml(r.key || '')}" style="border-bottom:1px solid var(--line-soft)">
+      <td style="padding:2px 4px">${cell('data', r.data)}</td><td style="padding:2px 4px">${selSens(r.sens)}</td><td style="padding:2px 4px">${selModo(r.modo)}</td>
+      <td style="padding:2px 4px">${cell('nave', r.nave)}</td><td style="padding:2px 4px">${cell('scalo', r.scalo)}</td><td style="padding:2px 4px">${cell('volo', r.volo)}</td>
+      <td style="padding:2px 4px">${cell('std', r.std)}</td><td style="padding:2px 4px;width:60px">${cell('pax', r.pax, 'number')}</td>
+      <td style="padding:2px 4px">${cell('inizioTurno', r.inizioTurno)}</td><td style="padding:2px 4px">${cell('convocazione', r.convocazione)}</td>
+      <td style="padding:2px 4px">${selAss(r.assistenza)}</td><td style="padding:2px 4px">${cell('note', r.note)}</td>
+      <td style="padding:2px 4px;text-align:center"><button data-del class="clear-all-btn" style="padding:2px 8px">×</button></td></tr>`;
+    const rows = ALL.slice().sort((a, b) => (a.data || '').localeCompare(b.data || '') || String(a.scalo).localeCompare(String(b.scalo)) || (a.sens || '').localeCompare(b.sens || '') || ((toMin(a.std) ?? 1e9) - (toMin(b.std) ?? 1e9)));
+    ov.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:var(--surface,#fff)">
+        <h2 style="font-family:var(--d-disp,inherit);font-size:17px;color:var(--blue-darker)">File generale — ${ALL.length} righe</h2>
+        <div style="display:flex;gap:8px"><button class="browse" id="fe-add" style="margin:0">+ Riga</button><button class="clear-all-btn" id="fe-close">Chiudi</button></div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:8px max(16px,env(safe-area-inset-left,0px))">
+      <table style="width:100%;border-collapse:collapse;min-width:900px"><thead><tr style="position:sticky;top:0;background:var(--bg-soft);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-mute);text-align:left">
+        <th style="padding:6px">Data</th><th style="padding:6px">A/P</th><th style="padding:6px">Metier</th><th style="padding:6px">Nave</th><th style="padding:6px">Scalo</th><th style="padding:6px">Volo</th><th style="padding:6px">STD</th><th style="padding:6px">PAX</th><th style="padding:6px">Inizio</th><th style="padding:6px">Convoc</th><th style="padding:6px">Ass.</th><th style="padding:6px">Nota</th><th style="padding:6px"></th></tr></thead>
+        <tbody id="fe-body">${rows.map(rowHtml).join('')}</tbody></table></div>`;
+    document.body.appendChild(ov);
+    const body = ov.querySelector('#fe-body');
+    const recFromRow = (tr) => { const g = f => tr.querySelector(`[data-f="${f}"]`);
+      const r = { manual: true, passeggeri: [], data: g('data').value.trim(), sens: g('sens').value, modo: g('modo').value,
+        nave: g('nave').value.trim(), scalo: g('scalo').value.trim().toUpperCase(), volo: g('volo').value.trim(), std: g('std').value.trim(),
+        pax: +g('pax').value || 0, inizioTurno: g('inizioTurno').value.trim(), convocazione: g('convocazione').value.trim(),
+        assistenza: g('assistenza').value === '1', note: g('note').value.trim() };
+      r.turnoPax = r.pax; r.turnoLead = true; r.key = genKeyOf(r); return r; };
+    body.addEventListener('change', async e => { const tr = e.target.closest('tr'); if (!tr) return;
+      const old = tr.dataset.key; const r = recFromRow(tr);
+      if (old && old !== r.key) await dbDel(old); tr.dataset.key = r.key; await dbPut(r); ALL = await dbAll(); });
+    body.addEventListener('click', async e => { if (!e.target.closest('[data-del]')) return; const tr = e.target.closest('tr');
+      if (tr.dataset.key) await dbDel(tr.dataset.key); tr.remove(); ALL = await dbAll(); });
+    ov.querySelector('#fe-add').addEventListener('click', () => {
+      const r = { data: new Date().toISOString().slice(0, 10), sens: 'A', modo: '', nave: '', scalo: '', volo: '', std: '', pax: 0, inizioTurno: '', convocazione: '', assistenza: false, note: '' };
+      body.insertAdjacentHTML('afterbegin', rowHtml(r));
+    });
+    ov.querySelector('#fe-close').addEventListener('click', async () => { document.body.removeChild(ov); await recomputeAll(); render(); });
+  }
   let GENF = { q: '', scalo: '', nave: '', assist: '' };
   function genFiltered() {
     const q = GENF.q.trim().toLowerCase();
@@ -4059,10 +4102,12 @@ const GEN = (() => {
         <select id="gf-scalo" aria-label="Filtro scalo"><option value="">Tutti gli scali</option>${scaliOpts.map(s => `<option ${GENF.scalo === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
         <select id="gf-nave" aria-label="Filtro nave"><option value="">Tutte le navi</option>${naveOpts.map(s => `<option ${GENF.nave === s ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select>
         <select id="gf-assist" aria-label="Filtro assistenza"><option value="">Assistenza: tutte</option><option value="yes" ${GENF.assist === 'yes' ? 'selected' : ''}>Solo con assistenza</option><option value="no" ${GENF.assist === 'no' ? 'selected' : ''}>Solo senza</option></select>
+        <button id="gen-fulledit" class="browse" style="white-space:nowrap">Vista completa</button>
         <button id="gen-addrow" class="browse" style="white-space:nowrap">+ Riga</button>
       </div>
       <div id="gen-tablebox"></div>`;
     el.querySelector('#gen-addrow').addEventListener('click', () => openGenEditor({ data: new Date().toISOString().slice(0, 10) }, true));
+    el.querySelector('#gen-fulledit').addEventListener('click', openFullEditor);
     const q = el.querySelector('#gf-q');
     q.addEventListener('input', () => { GENF.q = q.value; renderGenTable(); });
     el.querySelector('#gf-scalo').addEventListener('change', e => { GENF.scalo = e.target.value; renderGenTable(); });
