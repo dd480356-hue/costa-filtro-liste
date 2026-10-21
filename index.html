@@ -3768,7 +3768,8 @@ const GEN = (() => {
     for (const r of sorted) {
       if (prevDay && prevDay !== r.data) { row++; zeb = false; }
       prevDay = r.data;
-      const d = new Date(r.data + 'T00:00:00');
+      const _p = String(r.data).split('-').map(Number);
+      const d = new Date(Date.UTC(_p[0], _p[1] - 1, _p[2]));  // UTC → ExcelJS non sfasa il giorno
       ws.getCell(row, 1).value = d; ws.getCell(row, 1).numFmt = 'dd/mm/yyyy';
       ws.getCell(row, 2).value = r.sens;
       ws.getCell(row, 3).value = r.nave;
