@@ -3340,17 +3340,17 @@ const GEN = (() => {
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
       // valori usati quando uno scalo non ne definisce uno proprio
-      default: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, sbConvOffset:0, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
+      default: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
                  tptImbConv:'', tptImbPart:'', tptSbarco:'', sbarcoTimes:[] },
       // CONFIGURAZIONE PER SCALO (orari sbarco: untilMin in minuti dalla mezzanotte; ultima riga senza untilMin = "oltre")
       scali: {
-        MXP: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, sbConvOffset:0, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
+        MXP: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
                tptImbConv:'11:00', tptImbPart:'11:30', tptSbarco:'13:30',
                sbarcoTimes:[{untilMin:900,t:'11:30'},{t:'13:30'}] },
-        LIN: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, sbConvOffset:0, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
+        LIN: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
                tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'13:00',
                sbarcoTimes:[{untilMin:900,t:'11:00'},{t:'13:00'}] },
-        FCO: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, sbConvOffset:0, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
+        FCO: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
                tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'11:00',
                sbarcoTimes:[{untilMin:750,t:'10:30'},{untilMin:960,t:'11:00'},{untilMin:1080,t:'13:30'},{t:'15:30'}] }
       }
@@ -3614,7 +3614,7 @@ const GEN = (() => {
       else if (scalo === 'MXP' && anyT2) assist = sum >= RULES.navi.t2ImbarcoMin;
       else assist = sum >= np(scalo, 'thrImbarco');
       // IMBARCO: riferimento = atterraggio volo (ETA). Offsets PER SCALO.
-      const addOff = np(scalo, 'addettoBeforePax'), stdAfter = np(scalo, 'stdAfterImbarco'), convOff = np(scalo, 'imbConvOffset');
+      const addOff = np(scalo, 'imbAddettoBefore'), stdAfter = np(scalo, 'stdAfterImbarco'), convOff = np(scalo, 'imbConvOffset');
       for (const x of cl) {
         let ref;
         if (x.tpt) { ref = toMin(sc(scalo).tptImbConv);
@@ -3629,7 +3629,7 @@ const GEN = (() => {
         : ((scalo === 'MXP' && anyT2 && RULES.navi.t2SbarcoIgnoreThreshold) ? true : (sum >= np(scalo, 'thrSbarco')));
       if (cl.some(x => x.wheelchair)) assist = true;  // sbarco con carrozzina → sempre assistito
       // SBARCO: riferimento = arrivo bus. Offsets PER SCALO. FINE vuota.
-      const addOff = np(scalo, 'addettoBeforePax'), stdAfter = np(scalo, 'stdAfterSbarco'), convOff = np(scalo, 'sbConvOffset');
+      const addOff = np(scalo, 'sbAddettoBefore'), stdAfter = np(scalo, 'stdAfterSbarco'), convOff = np(scalo, 'sbConvOffset');
       for (const x of cl) {
         const sb = x.tpt ? (sc(scalo).tptSbarco || '') : sbarcoTimeFor(scalo, toMin(x.std));
         x.sbarco = sb; const ref = toMin(sb);
@@ -3984,6 +3984,8 @@ const GEN = (() => {
     thrSbarco: 'Soglia: PAX minimi in sbarco perché questo scalo abbia assistenza.',
     imbConvOffset: 'IMBARCO: CONVOCAZIONE = atterraggio volo − questi minuti (0 = all’atterraggio).',
     sbConvOffset: 'SBARCO: CONVOCAZIONE = arrivo bus − questi minuti (0 = all’arrivo bus).',
+    imbAddettoBefore: 'IMBARCO: INIZIO TURNO ADDETTO = convocazione − questi minuti.',
+    sbAddettoBefore: 'SBARCO: INIZIO TURNO ADDETTO = convocazione − questi minuti.',
     imbConvBefore: 'Imbarco: minuti prima dell’arrivo del primo volo per convocare l’addetto.',
     imbBuffer: 'Imbarco: minuti dopo l’ultimo arrivo per la fine turno (ritardi/bagagli).',
     sbBusBefore: 'Sbarco: minuti prima dell’arrivo del bus (inizio turno).',
@@ -4032,23 +4034,30 @@ const GEN = (() => {
       return `<div class="filter-section" style="margin:10px 0">
         <div class="fs-label">${escapeHtml(code)} <button data-scdel="${code}" class="clear-all-btn" style="padding:2px 8px;margin-left:8px">Elimina scalo</button></div>
 
-        ${grp('IMBARCO')}
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-          ${num('thrImbarco', 'Soglia (min PAX)')}${num('imbConvOffset', 'Convocazione: atterraggio − (min)')}${num('stdAfterImbarco', 'STD = atterraggio + (min)')}${tim('tptImbConv', 'TPT convocazione')}${tim('tptImbPart', 'TPT partenza (STD)')}
+        ${grp('IMBARCO — il volo arriva (riferimento = atterraggio)')}
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          ${num('thrImbarco', 'Soglia assistenza (PAX)')}
+          ${num('imbConvOffset', 'Convocazione pax = atterraggio − (min)')}
+          ${num('imbAddettoBefore', 'Inizio addetto = convocazione − (min)')}
+          ${num('stdAfterImbarco', 'STD = atterraggio + (min)')}
+        </div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          ${tim('tptImbConv', 'TPT: convocazione (HH:MM)')}${tim('tptImbPart', 'TPT: partenza / STD (HH:MM)')}
         </div>
 
-        ${grp('SBARCO')}
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-          ${num('thrSbarco', 'Soglia (min PAX)')}${num('sbConvOffset', 'Convocazione: arrivo bus − (min)')}${num('stdAfterSbarco', 'STD = arrivo bus + (min)')}${tim('tptSbarco', 'TPT sbarco')}
+        ${grp('SBARCO — il volo parte (riferimento = arrivo bus)')}
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          ${num('thrSbarco', 'Soglia assistenza (PAX)')}
+          ${num('sbConvOffset', 'Convocazione pax = arrivo bus − (min)')}
+          ${num('sbAddettoBefore', 'Inizio addetto = convocazione − (min)')}
+          ${num('stdAfterSbarco', 'STD = arrivo bus + (min)')}
         </div>
-        <div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari sbarco bus — voli fino alle (vuoto = oltre) → arrivo bus</div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          ${tim('tptSbarco', 'TPT: arrivo bus (HH:MM)')}
+        </div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari arrivo bus per fascia — voli fino alle (vuoto = oltre) → arrivo bus</div>
         <table style="margin-top:4px;border-collapse:collapse"><tbody>${rows}</tbody></table>
         <button data-scaddrow="${code}" class="browse" style="margin:6px 0 0;padding:4px 10px">+ riga orario</button>
-
-        ${grp('COMUNE (imbarco + sbarco)')}
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-          ${num('addettoBeforePax', 'Inizio addetto: anticipo su convocazione (min)')}
-        </div>
       </div>`;
     };
     const cards = Object.keys(scali).sort().map(k => card(k, scali[k])).join('');
