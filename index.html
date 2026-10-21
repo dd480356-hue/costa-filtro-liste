@@ -3556,6 +3556,7 @@ const GEN = (() => {
 
   // ---- Motore : clustering + assistenza + turni ----
   function hhmm(min) { if (min == null) return ''; min = ((min % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
+  function cleanVolo(v) { const s = String(v == null ? '' : v).trim(); return (!s || /^[*#\s.\-_/]+$/.test(s)) ? 'N/D' : s; }
   function sbarcoTimeFor(scalo, stdMin) {
     const tbl = sc(scalo).sbarcoTimes; if (!tbl || !tbl.length) return '';
     for (const e of tbl) { if (e.untilMin == null) return e.t; if (stdMin != null && stdMin <= e.untilMin) return e.t; }
@@ -3778,7 +3779,7 @@ const GEN = (() => {
       ws.getCell(row, 2).value = r.sens;
       ws.getCell(row, 3).value = r.nave;
       ws.getCell(row, 4).value = r.scalo;
-      ws.getCell(row, 5).value = r.volo;
+      ws.getCell(row, 5).value = cleanVolo(r.volo);
       ws.getCell(row, 6).value = r.destinazione || '';
       if (r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;      // ogni riga
       if (r.convocazione) ws.getCell(row, 8).value = r.convocazione;    // ogni riga
@@ -3918,7 +3919,7 @@ const GEN = (() => {
         : '<span style="display:inline-block;min-width:17px;text-align:center;font-weight:800;color:#15386A;background:#E7EFFA;border-radius:5px;padding:1px 4px">A</span> arrivo'}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.nave)}</td>
       <td style="padding:5px 8px;font-size:12px"><b>${escapeHtml(r.scalo)}</b>${r.tpt ? ' <span style="font-size:10px;color:var(--ink-mute)">TPT</span>' : ''}${r.terminal === 'T2' ? ' <span style="font-size:10px;color:var(--yellow-deep)">T2</span>' : ''}${r.wheelchair ? ' <span title="sedia a rotelle">♿</span>' : ''}</td>
-      <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.volo)}</td>
+      <td style="padding:5px 8px;font-size:12px">${escapeHtml(cleanVolo(r.volo))}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${escapeHtml(r.std)}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${r.pax}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${r.turnoPax}</td>
