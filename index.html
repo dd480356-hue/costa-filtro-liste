@@ -1034,6 +1034,27 @@ details.filter-section>summary.fs-label:hover{color:var(--d-navy)}
 .results table tbody td{padding:10px 12px}
 .results table tbody tr:hover td{background:var(--d-soft)}
 
+/* ── Finitura professionale ── */
+::selection{background:rgba(46,107,176,.18)}
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:#C3D0E2;border:3px solid var(--d-bg);border-radius:10px}
+*::-webkit-scrollbar-thumb:hover{background:#A7B8D0}
+.tab .ico{display:grid;place-items:center;width:24px;height:24px}
+.tab:hover:not(.active){color:var(--d-navy)}
+header.app::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--d-navy2),var(--d-gold) 72%,transparent);border-radius:2px}
+input:focus,select:focus,textarea:focus{border-color:var(--d-navy2);box-shadow:0 0 0 3px rgba(46,107,176,.14);outline:none}
+.result-card:hover{box-shadow:0 1px 2px rgba(18,45,90,.05),0 18px 40px -22px rgba(18,45,90,.38)}
+.pill{font-weight:700;letter-spacing:.02em;padding:3px 10px;font-size:10.5px}
+@media (prefers-reduced-motion:no-preference){
+  .tab-panel{animation:fadein .24s ease-out}
+  @keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .result-card,.filter-section{transition:box-shadow .2s}
+  .browse{transition:transform .12s,background .15s,box-shadow .2s}
+  .browse:active{transform:translateY(1px)}
+  .tab{transition:background .18s,color .18s,box-shadow .18s}
+}
+
 /* Responsive mobile */
 @media(max-width:680px){
   .wrap{padding-left:16px;padding-right:16px}
@@ -1068,8 +1089,8 @@ details.filter-section>summary.fs-label:hover{color:var(--d-navy)}
 </header>
 
 <nav class="tabs">
-  <button class="tab active" data-tab="flt"><span class="ico">L</span> Liste</button>
-  <button class="tab" data-tab="gen"><span class="ico">G</span> Generale assistenze</button>
+  <button class="tab active" data-tab="flt"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg></span> Liste</button>
+  <button class="tab" data-tab="gen"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6"/><line x1="16" y1="2.5" x2="16" y2="6"/></svg></span> Generale assistenze</button>
 </nav>
 
 <section class="tab-panel" data-panel="flt">
