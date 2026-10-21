@@ -3888,7 +3888,9 @@ const GEN = (() => {
     return `<tr style="border-bottom:1px solid var(--line-soft);${r.assistenza ? 'background:var(--yellow-tint)' : ''}">
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.data)}</td>
       <td style="padding:5px 8px;font-size:11px;color:var(--ink-mute)">${escapeHtml(r.modo || '')}</td>
-      <td style="padding:5px 8px;font-size:12px">${r.sens === 'P' ? 'SBARCO' : 'IMBARCO'}</td>
+      <td style="padding:5px 8px;font-size:12px;white-space:nowrap">${r.sens === 'P'
+        ? '<span style="display:inline-block;min-width:17px;text-align:center;font-weight:800;color:#B07400;background:#FCF2D6;border-radius:5px;padding:1px 4px">P</span> partenza'
+        : '<span style="display:inline-block;min-width:17px;text-align:center;font-weight:800;color:#15386A;background:#E7EFFA;border-radius:5px;padding:1px 4px">A</span> arrivo'}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.nave)}</td>
       <td style="padding:5px 8px;font-size:12px"><b>${escapeHtml(r.scalo)}</b>${r.tpt ? ' <span style="font-size:10px;color:var(--ink-mute)">TPT</span>' : ''}${r.terminal === 'T2' ? ' <span style="font-size:10px;color:var(--yellow-deep)">T2</span>' : ''}${r.wheelchair ? ' <span title="sedia a rotelle">♿</span>' : ''}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.volo)}</td>
