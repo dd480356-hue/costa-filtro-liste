@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!--
+  Filtro Liste Passeggeri — Costa Crociere · Generale Assistenze
+  © LBS — Leisure and Business Services · Firmato: LBS IT
+  App client-side (offline IndexedDB / online Supabase). Deploy continuo GitHub → Netlify.
+-->
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -1221,7 +1226,7 @@ details.filter-section>summary.fs-label:hover{color:var(--d-navy)}
 
 <footer class="app">
   <span>Tutto avviene nel browser <span class="dot">●</span> Nessun dato lascia il tuo computer</span>
-  <span>Costa Crociere · 2026</span>
+  <span>Costa Crociere · 2026 · Filtro Liste — © LBS IT</span>
 </footer>
 
 </div>
@@ -1270,7 +1275,6 @@ const ITALIAN_AIRPORTS = new Set([
   'NAP','QSR','BRI','BDS','FOG','SUF','REG','VST',
   'CTA','PMO','TPS','CIY','CAG','OLB','AHO','PEG',
 ]);
-const COVERED_AIRPORTS = ITALIAN_AIRPORTS;
 
 // Mapping aéroport → port de croisière (uniquement pour les 3 ports historiques)
 const AIRPORT_TO_PORT = {
@@ -1371,9 +1375,6 @@ let TRANSFER_SUPPLIERS = ['COSTAMED', 'GIOCO VIAGGI'];
 const TRANSFER_SUPPLIER = 'COSTAMED + GIOCO VIAGGI';  // libellé affiché
 const supplierKey = v => String(v || '').toUpperCase().replace(/\s+/g, '');
 const SUPPLIER_KEYS = new Set(TRANSFER_SUPPLIERS.map(supplierKey));
-function isCostamed(row) {
-  return SUPPLIER_KEYS.has(supplierKey(row['Supplier']));
-}
 // Transfer : seuls ces aéroports + fournisseur imposé par aéroport.
 //   MXP / MX1 / LIN  → GIOCO VIAGGI
 //   FCO              → COSTAMED
@@ -3986,14 +3987,9 @@ const GEN = (() => {
     sbConvOffset: 'SBARCO: CONVOCAZIONE = arrivo bus − questi minuti (0 = all’arrivo bus).',
     imbAddettoBefore: 'IMBARCO: INIZIO TURNO ADDETTO = convocazione − questi minuti.',
     sbAddettoBefore: 'SBARCO: INIZIO TURNO ADDETTO = convocazione − questi minuti.',
-    imbConvBefore: 'Imbarco: minuti prima dell’arrivo del primo volo per convocare l’addetto.',
-    imbBuffer: 'Imbarco: minuti dopo l’ultimo arrivo per la fine turno (ritardi/bagagli).',
-    sbBusBefore: 'Sbarco: minuti prima dell’arrivo del bus (inizio turno).',
-    sbBusAfter: 'Sbarco: minuti dopo l’arrivo del bus (fine turno).',
     tptImbConv: 'TPT imbarco: orario fisso di convocazione (HH:MM).',
     tptImbPart: 'TPT imbarco: orario fisso di partenza dall’aeroporto (HH:MM).',
     tptSbarco: 'TPT sbarco: orario fisso (HH:MM).',
-    addettoBeforePax: 'Minuti di anticipo dell’INIZIO TURNO ADDETTO sulla convocazione (riferimento).',
     stdAfterImbarco: 'IMBARCO: STD = atterraggio volo + questi minuti.',
     stdAfterSbarco: 'SBARCO: STD = arrivo bus + questi minuti.'
   };
@@ -4003,9 +3999,6 @@ const GEN = (() => {
     'navi.t2SbarcoIgnoreThreshold': 'Terminal 2 Malpensa in sbarco: sempre assistito, ignora la soglia.',
     'navi.t2ImbarcoMin': 'Terminal 2 Malpensa in imbarco: assistito solo a partire da questo numero di PAX (es. 15).',
     'navi.splitGapMin': 'Se tra due voli dello stesso scalo c’è più di questi minuti, il turno viene spezzato.',
-    'navi.addettoBeforePax': 'Minuti di anticipo dell’INIZIO TURNO ADDETTO rispetto alla CONVOCAZIONE PASSEGGERI (es. 30).',
-    'navi.stdAfterImbarco': 'IMBARCO: lo STD = atterraggio del volo + questi minuti (es. 60).',
-    'navi.stdAfterSbarco': 'SBARCO: lo STD = arrivo del bus + questi minuti (es. 30).',
     'charter.threshold': 'PAX minimi perché un volo charter abbia assistenza (19–20).',
     'charter.gapMin': 'Scarto massimo (minuti) per raggruppare voli charter dello stesso scalo.',
     'charter.transitReportAtTakeoff': 'Transito: il turno finisce con l’invio del report a Costa al decollo.',
