@@ -3325,7 +3325,7 @@ const GEN = (() => {
     shipMode: { SMERALDA:'NAVI', FASCINOSA:'NAVI', PACIFICA:'NAVI', DIADEMA:'NAVI',
                 FAVOLOSA:'NAVI', TOSCANA:'NAVI', FORTUNA:'NAVI',
                 DELIZIOSA:'CHARTER', SERENA:'CHARTER' },
-    modeLists: { NAVI:['TRF_PRE','TRF_POST'], CHARTER:['FLT_PRE'] },
+    modeLists: { NAVI:['TRF_PRE','TRF_POST'], CHARTER:['FLT_PRE'], NORMALE:['FLT_PRE'] },
     // Richieste particolari (colonna Note = AO) : sedia a rotelle → sbarco sempre assistito
     wheelchairRegex: 'WHEELCHAIR|WCH[RSC]|SEDIA A ROTELLE|FAUTEUIL|CARROZZINA',
     // Filtri liste (configurabili) : aeroporti italiani (Flight PRE), fornitori transfer, stati esclusi
@@ -3360,6 +3360,14 @@ const GEN = (() => {
       convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
       itaScali:['LIN','MXP','FCO','BGY'],
       aircraftByFlight:{}   // es. {"AZ 123":"787"} : da compilare, altrimenti fallback CX/ITA/ALTRI
+    },
+    // Voli NORMALI (di linea) : set separato dal charter, tutto configurabile.
+    // Inerte finché non si assegna una nave al metier NORMALE.
+    normale: {
+      threshold:20, gapMin:60, transitReportAtTakeoff:true, checkinCloseBeforeMin:10,
+      convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
+      itaScali:['LIN','MXP','FCO','BGY'],
+      aircraftByFlight:{}
     }
   };
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -3546,29 +3554,30 @@ const GEN = (() => {
     for (const e of tbl) { if (e.untilMin == null) return e.t; if (stdMin != null && stdMin <= e.untilMin) return e.t; }
     return tbl[tbl.length - 1].t;
   }
-  function charterCat(rec) {
-    const byF = RULES.charter.aircraftByFlight || {};
+  function flightCat(rec, cfg) {
+    const byF = cfg.aircraftByFlight || {};
     if (byF[rec.volo]) return byF[rec.volo];
     if (rec.carrier === 'CX') return 'CX';
-    if (RULES.charter.itaScali.includes(String(rec.scalo).toUpperCase())) return 'ITA';
+    if ((cfg.itaScali || []).includes(String(rec.scalo).toUpperCase())) return 'ITA';
     return 'ALTRI';
   }
-  function computeCharter(cl) {
+  // Calcolo voli (charter O normale), con il proprio set di regole cfg.
+  function computeFlights(cl, cfg) {
     const sum = cl.reduce((s, x) => s + x.pax, 0);
-    const assist = sum >= RULES.charter.threshold;
+    const assist = sum >= cfg.threshold;
     const first = cl[0], lastR = cl[cl.length - 1];
     const transit = cl.every(x => x.transito);
     cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0);
       x.turnoStart = first.std || ''; x.turnoEnd = lastR.std || ''; });
     if (!assist) return;
-    if (transit && RULES.charter.transitReportAtTakeoff) {
+    if (transit && cfg.transitReportAtTakeoff) {
       const cm = toMin(first.std);
-      first.convocazione = cm != null ? hhmm(cm - RULES.charter.checkinCloseBeforeMin) : '';
+      first.convocazione = cm != null ? hhmm(cm - cfg.checkinCloseBeforeMin) : '';
       first.inizioTurno = first.convocazione;
       first.fineTurno = lastR.std || '';
       first.note = 'TRANSITO: chiusura check-in → report al decollo';
     } else {
-      const cat = charterCat(first); const rule = RULES.charter.convByType[cat] || RULES.charter.convByType.ALTRI;
+      const cat = flightCat(first, cfg); const rule = cfg.convByType[cat] || cfg.convByType.ALTRI;
       const cm = toMin(first.std); const conv = cm != null ? cm - Math.round(rule.h * 60) : null;
       first.convocazione = conv != null ? hhmm(conv) : '';
       first.inizioTurno = conv != null ? hhmm(conv - rule.pre) : '';
@@ -3621,13 +3630,14 @@ const GEN = (() => {
     for (const arr of groups.values()) {
       arr.sort((a, b) => ((toMin(a.std) ?? 1e9) - (toMin(b.std) ?? 1e9)));
       const modo = arr[0].modo, sens = arr[0].sens;
-      const bound = modo === 'CHARTER' ? RULES.charter.gapMin : RULES.navi.splitGapMin;
+      const flightCfg = modo === 'CHARTER' ? RULES.charter : (modo === 'NORMALE' ? RULES.normale : null);
+      const bound = flightCfg ? flightCfg.gapMin : RULES.navi.splitGapMin;
       let cl = [], clusters = [], last = null;
       for (const r of arr) { const m = toMin(r.std);
         if (cl.length && m != null && last != null && (m - last) > bound) { clusters.push(cl); cl = []; }
         cl.push(r); if (m != null) last = m; }
       if (cl.length) clusters.push(cl);
-      for (const cluster of clusters) { if (modo === 'CHARTER') computeCharter(cluster); else computeNavi(cluster, sens); }
+      for (const cluster of clusters) { if (flightCfg) computeFlights(cluster, flightCfg); else computeNavi(cluster, sens); }
     }
   }
   async function recomputeAll() { ALL = await dbAll(); computeEngine(ALL); }
@@ -4011,17 +4021,24 @@ const GEN = (() => {
     const chk = (p, lbl) => `<label style="display:block;font-size:12px;margin:3px 0"><input type="checkbox" data-r="${p}" ${getPath(R, p) ? 'checked' : ''}> ${lbl}${hb(GEN_HELP[p])}</label>`;
     const numr = (p, lbl, step) => `<label style="font-size:11px;color:var(--ink-soft);margin:0 12px 6px 0;display:inline-block">${lbl}${hb(GEN_HELP[p])}<br><input type="number" ${step ? `step="${step}"` : ''} data-r="${p}" value="${getPath(R, p) == null ? '' : getPath(R, p)}" style="width:80px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
     const TYPES = ['787', '737', 'ITA', 'CX', 'ALTRI'];
-    const convRows = Object.entries(c.convByType).map(([tp, r]) => `<tr><td style="padding:2px 8px;font-weight:600">${tp}</td>
-       <td style="padding:2px"><input type="number" step="0.5" data-conv="${tp}" data-ck="h" value="${r.h}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> h prima</td>
-       <td style="padding:2px"><input type="number" data-conv="${tp}" data-ck="pre" value="${r.pre}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> min inizio</td></tr>`).join('');
-    const acfRow = (v, tp) => `<div class="acf-row" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+    const convRowsFor = (setName, obj) => Object.entries(obj.convByType).map(([tp, r]) => `<tr><td style="padding:2px 8px;font-weight:600">${tp}</td>
+       <td style="padding:2px"><input type="number" step="0.5" data-conv="${tp}" data-ck="h" data-set="${setName}" value="${r.h}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> h prima</td>
+       <td style="padding:2px"><input type="number" data-conv="${tp}" data-ck="pre" data-set="${setName}" value="${r.pre}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> min inizio</td></tr>`).join('');
+    const acfRowFor = (setName, v, tp) => `<div class="acf-row" data-set="${setName}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
        <input class="acf-volo" type="text" value="${v}" placeholder="es. AZ 123" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px">→
        <select class="acf-tipo" style="padding:4px;border:1px solid var(--line);border-radius:6px">${TYPES.map(o => `<option ${o === tp ? 'selected' : ''}>${o}</option>`).join('')}</select>
-       ${v ? `<button data-acfdel="${v}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
-    const acfRows = Object.entries(c.aircraftByFlight || {}).map(([v, tp]) => acfRow(v, tp)).join('') + acfRow('', '787');
+       ${v ? `<button data-acfdel="${v}" data-set="${setName}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const acfRowsFor = (setName, obj) => Object.entries(obj.aircraftByFlight || {}).map(([v, tp]) => acfRowFor(setName, v, tp)).join('') + acfRowFor(setName, '', '787');
+    const flightSec = (setName, obj, title) => sec(title,
+      `<div>${numr(setName + '.threshold', 'Soglia PAX')}${numr(setName + '.gapMin', 'Finestra raggruppamento (min)')}</div>` +
+      chk(setName + '.transitReportAtTakeoff', 'Transito: fine turno = report al decollo') +
+      `<div>${numr(setName + '.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
+      `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="${setName}.itaScali" value="${(obj.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRowsFor(setName, obj)}</table>` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>${acfRowsFor(setName, obj)}`);
     const ships = Object.entries(R.shipMode).map(([s, m]) => `<div style="display:flex;gap:6px;align-items:center;margin:2px 0">
        <span style="width:120px;font-size:12px">${escapeHtml(s)}</span>
-       <select data-ship="${s}" style="padding:4px;border:1px solid var(--line);border-radius:6px"><option ${m === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${m === 'CHARTER' ? 'selected' : ''}>CHARTER</option></select>
+       <select data-ship="${s}" style="padding:4px;border:1px solid var(--line);border-radius:6px"><option ${m === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${m === 'CHARTER' ? 'selected' : ''}>CHARTER</option><option ${m === 'NORMALE' ? 'selected' : ''}>NORMALE</option></select>
        <button data-shipdel="${s}" class="clear-all-btn" style="padding:2px 7px">✕</button></div>`).join('');
     const sec = (t, b) => `<details class="filter-section"><summary class="fs-label" style="cursor:pointer">${t}</summary><div style="margin-top:10px">${b}</div></details>`;
     return [
@@ -4030,13 +4047,8 @@ const GEN = (() => {
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
         `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>`),
-      sec('CHARTER (Deliziosa, Serena)',
-        `<div>${numr('charter.threshold', 'Soglia PAX')}${numr('charter.gapMin', 'Finestra raggruppamento (min)')}</div>` +
-        chk('charter.transitReportAtTakeoff', 'Transito: fine turno = report al decollo') +
-        `<div>${numr('charter.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
-        `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)${hb(GEN_HELP['charter.itaScali'])}<br><input type="text" data-r="charter.itaScali" value="${(c.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
-        `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRows}</table>` +
-        `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>${acfRows}`),
+      flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
+      flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
       sec('Navi → metier',
         ships + `<div style="margin-top:6px"><input id="gen-ship-new" type="text" placeholder="NOME NAVE" style="width:150px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-ship-add" class="browse" style="margin-left:6px;padding:5px 10px">+ nave</button></div>`),
       sec('Richieste particolari',
@@ -4117,7 +4129,8 @@ const GEN = (() => {
         const syncTop = () => { gi.value = RULES.navi.default.thrImbarco; gs.value = RULES.navi.default.thrSbarco; ggi.value = RULES.navi.gapImbarco; ggs.value = RULES.navi.gapSbarco; };
         const refreshAll = () => { try { applyFilterCfg(RULES.filters); } catch (e) {} dwrap.innerHTML = advancedEditorHtml(); if (scaliWrap) scaliWrap.innerHTML = scaliEditorHtml(); syncTop(); };
         const refreshAdv = () => { dwrap.innerHTML = advancedEditorHtml(); };
-        const rebuildAcf = () => { const m = {}; dwrap.querySelectorAll('.acf-row').forEach(r => { const v = r.querySelector('.acf-volo').value.trim(); const tp = r.querySelector('.acf-tipo').value; if (v) m[v] = tp; }); RULES.charter.aircraftByFlight = m; };
+        const rebuildAcf = () => { for (const set of ['charter', 'normale']) { if (!RULES[set]) continue; const m = {};
+          dwrap.querySelectorAll('.acf-row[data-set="' + set + '"]').forEach(r => { const v = r.querySelector('.acf-volo').value.trim(); const tp = r.querySelector('.acf-tipo').value; if (v) m[v] = tp; }); RULES[set].aircraftByFlight = m; } };
         refreshAdv();
         dwrap.addEventListener('change', async e => {
           const t = e.target;
@@ -4125,13 +4138,13 @@ const GEN = (() => {
             try { RULES = deepMerge(clone(DEF_RULES), JSON.parse(await f.text())); saveRules(); refreshAll(); await recomputeAll(); render(); }
             catch (err) { alert('File regole non valido: ' + (err.message || err)); } t.value = ''; return; }
           if (t.dataset.r) { let v = t.type === 'checkbox' ? t.checked : (t.type === 'number' ? +t.value : t.value);
-            const UP = ['charter.itaScali', 'filters.italianAirports', 'filters.excludedStatuses'];
+            const UP = ['charter.itaScali', 'normale.itaScali', 'filters.italianAirports', 'filters.excludedStatuses'];
             const KEEP = ['filters.transferSuppliers'];
             if (UP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
             else if (KEEP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim()).filter(Boolean);
             setPath(RULES, t.dataset.r, v);
             if (t.dataset.r.startsWith('filters.')) applyFilterCfg(RULES.filters); }
-          else if (t.dataset.conv) { const o = RULES.charter.convByType[t.dataset.conv] || (RULES.charter.convByType[t.dataset.conv] = {}); o[t.dataset.ck] = +t.value; }
+          else if (t.dataset.conv) { const set = t.dataset.set || 'charter'; const o = RULES[set].convByType[t.dataset.conv] || (RULES[set].convByType[t.dataset.conv] = {}); o[t.dataset.ck] = +t.value; }
           else if (t.dataset.ship) { RULES.shipMode[t.dataset.ship] = t.value; }
           else if (t.classList.contains('acf-volo') || t.classList.contains('acf-tipo')) { rebuildAcf(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
           else return;
@@ -4144,7 +4157,7 @@ const GEN = (() => {
           if (t.id === 'gen-rules-default') { if (!confirm('Ripristinare TUTTE le regole ai valori di default?')) return; RULES = clone(DEF_RULES); saveRules(); refreshAll(); await recomputeAll(); render(); return; }
           if (t.id === 'gen-ship-add') { const inp = dwrap.querySelector('#gen-ship-new'); const v = (inp && inp.value || '').trim().toUpperCase(); if (v) { RULES.shipMode[v] = RULES.shipMode[v] || 'NAVI'; saveRules(); refreshAdv(); await recomputeAll(); render(); } return; }
           if (t.dataset.shipdel) { delete RULES.shipMode[t.dataset.shipdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
-          if (t.dataset.acfdel) { delete RULES.charter.aircraftByFlight[t.dataset.acfdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.acfdel) { const set = t.dataset.set || 'charter'; delete RULES[set].aircraftByFlight[t.dataset.acfdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
         });
         // ── Configurazione per scalo (editor dedicato) ──
         const sbox = document.createElement('details'); sbox.id = 'gen-scali-box'; sbox.open = true; sbox.style.marginTop = '12px';
