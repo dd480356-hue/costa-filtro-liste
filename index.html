@@ -4016,18 +4016,27 @@ const GEN = (() => {
         <td style="padding:2px;color:var(--ink-mute)">→</td>
         <td style="padding:2px"><input data-sc="${code}" data-sbi="${i}" data-sbk="t" type="text" placeholder="HH:MM" value="${e.t || ''}" style="width:66px;padding:3px;border:1px solid var(--line);border-radius:6px"></td>
         <td style="padding:2px"><button data-sc="${code}" data-sbdel="${i}" class="clear-all-btn" style="padding:2px 7px">✕</button></td></tr>`).join('');
+      const grp = t => `<div style="font-size:10.5px;font-weight:700;color:var(--blue);margin:10px 0 4px;letter-spacing:.04em">${t}</div>`;
       return `<div class="filter-section" style="margin:10px 0">
         <div class="fs-label">${escapeHtml(code)} <button data-scdel="${code}" class="clear-all-btn" style="padding:2px 8px;margin-left:8px">Elimina scalo</button></div>
+
+        ${grp('IMBARCO')}
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
-          ${num('thrImbarco', 'Soglia imbarco')}${num('thrSbarco', 'Soglia sbarco')}
-          ${num('imbConvBefore', 'Imb: conv −min')}${num('imbBuffer', 'Imb: buffer +min')}
-          ${num('sbBusBefore', 'Sbarco: −min bus')}${num('sbBusAfter', 'Sbarco: +min bus')}
-          ${num('addettoBeforePax', 'Inizio addetto: anticipo (min)')}${num('stdAfterImbarco', 'Imbarco STD: atterraggio + (min)')}${num('stdAfterSbarco', 'Sbarco STD: arrivo bus + (min)')}
-          ${tim('tptImbConv', 'TPT imb convoc.')}${tim('tptImbPart', 'TPT imb part.')}${tim('tptSbarco', 'TPT sbarco')}
+          ${num('thrImbarco', 'Soglia (min PAX)')}${num('stdAfterImbarco', 'STD = atterraggio + (min)')}${tim('tptImbConv', 'TPT convocazione')}${tim('tptImbPart', 'TPT partenza (STD)')}
         </div>
-        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari sbarco voli — voli fino alle (vuoto = oltre) → orario sbarco</div>
+
+        ${grp('SBARCO')}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          ${num('thrSbarco', 'Soglia (min PAX)')}${num('stdAfterSbarco', 'STD = arrivo bus + (min)')}${tim('tptSbarco', 'TPT sbarco')}
+        </div>
+        <div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari sbarco bus — voli fino alle (vuoto = oltre) → arrivo bus</div>
         <table style="margin-top:4px;border-collapse:collapse"><tbody>${rows}</tbody></table>
         <button data-scaddrow="${code}" class="browse" style="margin:6px 0 0;padding:4px 10px">+ riga orario</button>
+
+        ${grp('COMUNE (imbarco + sbarco)')}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          ${num('addettoBeforePax', 'Inizio addetto: anticipo su convocazione (min)')}
+        </div>
       </div>`;
     };
     const cards = Object.keys(scali).sort().map(k => card(k, scali[k])).join('');
