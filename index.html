@@ -3532,6 +3532,8 @@ const GEN = (() => {
           isTransit = !!(r['Ori6IT'] && r['Ori5IT']);
         }
         if (String(scalo).toUpperCase() === 'MX1') scalo = 'MXP';  // MX1 = MXP (stesso aeroporto)
+        volo = String(volo).trim();
+        if (!volo || /^[*#\s.\-_/]+$/.test(volo)) volo = 'N/D';  // numero volo mascherato/non assegnato (es. *****) → N/D
         const carrier = (String(volo).match(/^[A-Z]{2}/) || [''])[0];
         if (!scalo || !datev) continue;
         const key = [datev, ship.toUpperCase(), scalo.toUpperCase(), String(volo).toUpperCase(), sens].join('|');
