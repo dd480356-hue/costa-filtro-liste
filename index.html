@@ -3359,14 +3359,17 @@ const GEN = (() => {
       threshold:20, gapMin:60, italianOnly:true, transitReportAtTakeoff:true, checkinCloseBeforeMin:10,
       // ore prima dello STD per categoria ; inizio turno = convocazione − pre (min)
       convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
+      // Capienza max per tipo aereo : il tipo si deduce dai PAX del volo (il più piccolo la cui capienza ≥ pax)
+      maxPaxByType:{ '737':186, '787':352 },
       itaScali:['LIN','MXP','FCO','BGY'],
-      aircraftByFlight:{}   // es. {"AZ 123":"787"} : da compilare, altrimenti fallback CX/ITA/ALTRI
+      aircraftByFlight:{}   // es. {"AZ 123":"787"} : prioritario sulla capienza
     },
     // Voli NORMALI (di linea) : set separato dal charter, tutto configurabile.
     // Inerte finché non si assegna una nave al metier NORMALE.
     normale: {
       threshold:20, gapMin:60, transitReportAtTakeoff:true, checkinCloseBeforeMin:10,
       convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
+      maxPaxByType:{ '737':186, '787':352 },
       itaScali:['LIN','MXP','FCO','BGY'],
       aircraftByFlight:{}
     }
@@ -3560,6 +3563,12 @@ const GEN = (() => {
     const byF = cfg.aircraftByFlight || {};
     if (byF[rec.volo]) return byF[rec.volo];
     if (rec.carrier === 'CX') return 'CX';
+    // Deduzione dal numero PAX del volo : il tipo più piccolo la cui capienza ≥ pax.
+    const caps = Object.entries(cfg.maxPaxByType || {}).map(([t, n]) => [t, +n]).filter(([, n]) => n > 0).sort((a, b) => a[1] - b[1]);
+    if (caps.length && rec.pax != null) {
+      for (const [t, n] of caps) if (rec.pax <= n) return t;
+      return caps[caps.length - 1][0];  // oltre la capienza max → il tipo più grande
+    }
     if ((cfg.itaScali || []).includes(String(rec.scalo).toUpperCase())) return 'ITA';
     return 'ALTRI';
   }
@@ -4037,7 +4046,9 @@ const GEN = (() => {
       `<div>${numr(setName + '.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
       `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="${setName}.itaScali" value="${(obj.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
       `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRowsFor(setName, obj)}</table>` +
-      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>${acfRowsFor(setName, obj)}`);
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Capienza max per tipo (il tipo si deduce dai PAX del volo)</div><table style="margin-top:4px">` +
+      Object.entries(obj.maxPaxByType || {}).map(([t, n]) => `<tr><td style="padding:2px 8px;font-weight:600">${t}</td><td style="padding:2px"><input type="number" data-maxpax="${t}" data-set="${setName}" value="${n}" style="width:72px;padding:3px;border:1px solid var(--line);border-radius:6px"> pax max</td></tr>`).join('') + `</table>` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (prioritario sulla capienza; vuoto: CX dal vettore · capienza · ITA · ALTRI)</div>${acfRowsFor(setName, obj)}`);
     const ships = Object.entries(R.shipMode).map(([s, m]) => `<div style="display:flex;gap:6px;align-items:center;margin:2px 0">
        <span style="width:120px;font-size:12px">${escapeHtml(s)}</span>
        <select data-ship="${s}" style="padding:4px;border:1px solid var(--line);border-radius:6px"><option ${m === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${m === 'CHARTER' ? 'selected' : ''}>CHARTER</option><option ${m === 'NORMALE' ? 'selected' : ''}>NORMALE</option></select>
@@ -4148,6 +4159,7 @@ const GEN = (() => {
             setPath(RULES, t.dataset.r, v);
             if (t.dataset.r.startsWith('filters.')) applyFilterCfg(RULES.filters); }
           else if (t.dataset.conv) { const set = t.dataset.set || 'charter'; const o = RULES[set].convByType[t.dataset.conv] || (RULES[set].convByType[t.dataset.conv] = {}); o[t.dataset.ck] = +t.value; }
+          else if (t.dataset.maxpax) { const set = t.dataset.set || 'charter'; (RULES[set].maxPaxByType || (RULES[set].maxPaxByType = {}))[t.dataset.maxpax] = +t.value; }
           else if (t.dataset.ship) { RULES.shipMode[t.dataset.ship] = t.value; }
           else if (t.classList.contains('acf-volo') || t.classList.contains('acf-tipo')) { rebuildAcf(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
           else return;
