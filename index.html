@@ -1172,7 +1172,7 @@ header.app .logo{ height:60px; border-radius:16px; }
         <ul style="margin:8px 0 0 18px;line-height:1.7">
           <li>Navi: Deliziosa, Serena. Solo <b>Flight List PRE</b>, scali italiani.</li>
           <li>Assistenza se il volo ha <b>19–20 pax</b> (colonne transito: Origine 6, poi 5). Voli stesso scalo ≤ 1 h si sommano.</li>
-          <li>Pax in transito → assistente prende chiusura check-in − 10 min; fine = report al decollo.</li>
+          <li>Pax in <b>transito</b> (Origine 6 <b>e</b> Origine 5 scalo italiano) → assistente prende chiusura check-in − 10 min; fine = report al decollo.</li>
           <li>Convocazione = STD − ore; inizio = convocazione − 30 min.</li>
         </ul>
         <table style="border-collapse:collapse;font-size:12px;margin-top:8px;max-width:420px">
@@ -3495,7 +3495,8 @@ const GEN = (() => {
           volo = String(r['VoloIT'] || '').trim();
           datev = toIsoDate(r['DataVolo']);
           std = timeStr(r['Decollo']); eta = timeStr(r['Arrivo']);
-          isTransit = !!(r['Ori6IT'] || r['Ori5IT']);
+          // Transito: Origine 6 italiana E Origine 5 italiana.
+          isTransit = !!(r['Ori6IT'] && r['Ori5IT']);
         }
         if (String(scalo).toUpperCase() === 'MX1') scalo = 'MXP';  // MX1 = MXP (stesso aeroporto)
         const carrier = (String(volo).match(/^[A-Z]{2}/) || [''])[0];
