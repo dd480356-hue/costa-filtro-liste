@@ -3779,11 +3779,10 @@ const GEN = (() => {
       if (r.turnoLead && r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;
       if (r.turnoLead && r.convocazione) ws.getCell(row, 8).value = r.convocazione;
       ws.getCell(row, 9).value = r.std || '';
-      if (r.turnoLead && r.fineTurno) ws.getCell(row, 11).value = r.fineTurno;
+      // FINE TURNO ADDETTO (col K) e FASCIA + EXTRA ORA (col Q) : lasciati VUOTI, compilati a mano dal gestore del generale.
       ws.getCell(row, 12).value = r.pax;
       if (r.assistenza && r.turnoLead) {
         ws.getCell(row, 13).value = '1 ASSISTENTE';
-        ws.getCell(row, 17).value = `TURNO ${r.scalo} ${r.turnoStart}-${r.turnoEnd}`;
         if (r.note) ws.getCell(row, 22).value = r.note;
       }
       const rowFill = r.assistenza ? YEL : (zeb ? ZEBRA : null);
