@@ -3336,6 +3336,7 @@ const GEN = (() => {
     },
     navi: {
       foreignShips: [],   // navi « fuori d'Italia » (definite dall'utente) : a loro si applica la regola soglia+raggruppamento
+      addettoBeforePax: 30,   // INIZIO TURNO ADDETTO = CONVOCAZIONE PASSEGGERI − questi minuti
       gapImbarco:60, gapSbarco:60, splitGapMin:120,
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
@@ -3605,20 +3606,26 @@ const GEN = (() => {
       if (anyTpt && RULES.navi.tptImbarcoAlways) assist = true;
       else if (scalo === 'MXP' && anyT2) assist = sum >= RULES.navi.t2ImbarcoMin;
       else assist = sum >= np(scalo, 'thrImbarco');
-      // Orari per OGNI volo (non raggruppati).
+      // Orari per OGNI volo (non raggruppati). INIZIO ADDETTO = CONVOCAZIONE − addettoBeforePax.
+      const addOff = RULES.navi.addettoBeforePax || 0;
       for (const x of cl) {
-        if (x.tpt) { const conv = sc(scalo).tptImbConv; x.convocazione = conv || ''; x.inizioTurno = conv || ''; }
-        else { const etaMin = toMin(x.eta || x.std); const conv = etaMin != null ? etaMin - np(scalo, 'imbConvBefore') : null;
-          x.convocazione = conv != null ? hhmm(conv) : ''; x.inizioTurno = x.convocazione; }
+        let convMin;
+        if (x.tpt) convMin = toMin(sc(scalo).tptImbConv);
+        else { const etaMin = toMin(x.eta || x.std); convMin = etaMin != null ? etaMin - np(scalo, 'imbConvBefore') : null; }
+        x.convocazione = convMin != null ? hhmm(convMin) : '';
+        x.inizioTurno = convMin != null ? hhmm(convMin - addOff) : '';
       }
     } else {
       assist = anyTpt ? (anyFlight ? true : !RULES.navi.tptSbarcoOnlyIfSharedFlight)
         : ((scalo === 'MXP' && anyT2 && RULES.navi.t2SbarcoIgnoreThreshold) ? true : (sum >= np(scalo, 'thrSbarco')));
       if (cl.some(x => x.wheelchair)) assist = true;  // sbarco con carrozzina → sempre assistito
+      const addOff = RULES.navi.addettoBeforePax || 0;
       for (const x of cl) {
         const sb = x.tpt ? (sc(scalo).tptSbarco || '') : sbarcoTimeFor(scalo, toMin(x.std));
         x.sbarco = sb; const sm = toMin(sb);
-        x.convocazione = sm != null ? hhmm(sm - np(scalo, 'sbBusBefore')) : ''; x.inizioTurno = x.convocazione;
+        const convMin = sm != null ? sm - np(scalo, 'sbBusBefore') : null;
+        x.convocazione = convMin != null ? hhmm(convMin) : '';
+        x.inizioTurno = convMin != null ? hhmm(convMin - addOff) : '';
         if (x.wheelchair) x.note = 'SEDIA A ROTELLE';
       }
     }
@@ -3978,6 +3985,7 @@ const GEN = (() => {
     'navi.t2SbarcoIgnoreThreshold': 'Terminal 2 Malpensa in sbarco: sempre assistito, ignora la soglia.',
     'navi.t2ImbarcoMin': 'Terminal 2 Malpensa in imbarco: assistito solo a partire da questo numero di PAX (es. 15).',
     'navi.splitGapMin': 'Se tra due voli dello stesso scalo c’è più di questi minuti, il turno viene spezzato.',
+    'navi.addettoBeforePax': 'Minuti di anticipo dell’INIZIO TURNO ADDETTO rispetto alla CONVOCAZIONE PASSEGGERI (es. 30).',
     'charter.threshold': 'PAX minimi perché un volo charter abbia assistenza (19–20).',
     'charter.gapMin': 'Scarto massimo (minuti) per raggruppare voli charter dello stesso scalo.',
     'charter.transitReportAtTakeoff': 'Transito: il turno finisce con l’invio del report a Costa al decollo.',
@@ -4053,7 +4061,7 @@ const GEN = (() => {
         chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
-        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>` +
+        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}${numr('navi.addettoBeforePax', 'Inizio addetto: anticipo su convocazione (min)')}</div>` +
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`),
       flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
