@@ -3920,6 +3920,55 @@ const GEN = (() => {
     }
   }
 
+  // ---- Export lista di UN SOLO volo (passeggeri da assistere) ----
+  async function exportFlightList(rec) {
+    if (!rec || !rec.passeggeri || !rec.passeggeri.length) {
+      alert('Nessun passeggero in memoria per questo volo. La lista dettagliata resta solo in locale (non nel cloud): carica il file della lista su questo dispositivo.');
+      return;
+    }
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Costa Crociere — Lista assistenza';
+    const { BLUE, LINE, YEL, YELB, INK, ZEBRA } = PAL;
+    const thin = { style: 'thin', color: { argb: LINE } };
+    const box = { top: thin, bottom: thin, left: thin, right: thin };
+    const keys = Object.keys(rec.passeggeri[0]);
+    const NC = Math.max(keys.length, 4);
+    const ws = wb.addWorksheet((rec.volo || 'VOLO').slice(0, 28).replace(/[\\/?*\[\]:]/g, '-'), { views: [{ state: 'frozen', ySplit: 5 }] });
+    let logoId = null;
+    try { logoId = wb.addImage({ base64: 'data:image/png;base64,' + COSTA_LOGO_XL_B64, extension: 'png' }); } catch (e) {}
+    ws.getRow(1).height = 46; ws.getRow(2).height = 20;
+    if (logoId != null) ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 120, height: 66 } });
+    const shipTitle = /costa/i.test(rec.nave || '') ? rec.nave : ('COSTA ' + (rec.nave || ''));
+    ws.mergeCells(1, 2, 1, NC);
+    const st = ws.getCell(1, 2); st.value = String(shipTitle).toUpperCase();
+    st.font = { bold: true, size: 16, color: { argb: BLUE } }; st.alignment = { vertical: 'middle' };
+    ws.mergeCells(2, 2, 2, NC);
+    const si = ws.getCell(2, 2);
+    si.value = `${rec.sens === 'P' ? 'SBARCO' : 'IMBARCO'} · volo ${cleanVolo(rec.volo)} · ${rec.scalo} · ${rec.data} · STD ${rec.std} · ${rec.pax} PAX`;
+    si.font = { size: 11, color: { argb: INK } };
+    ws.mergeCells(3, 1, 3, NC);
+    const t3 = ws.getCell(3, 1);
+    t3.value = `Inizio turno ${rec.inizioTurno || '-'} · convocazione ${rec.convocazione || '-'}${rec.wheelchair ? ' · SEDIA A ROTELLE' : ''}`;
+    t3.font = { size: 11, bold: !!rec.wheelchair, color: { argb: rec.wheelchair ? YELB : INK } };
+    ws.getRow(4).height = 6;
+    ws.getRow(5).height = 22;
+    keys.forEach((h, j) => { const c = ws.getCell(5, j + 1); c.value = h;
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLUE } };
+      c.alignment = { vertical: 'middle', horizontal: 'center' }; c.border = box; });
+    let row = 6, zeb = false;
+    for (const p of rec.passeggeri) {
+      const wc = /WHEELCHAIR|WCH|SEDIA|FAUTEUIL|CARROZZINA/i.test(String(p.Richiesta || ''));
+      keys.forEach((k, j) => { const c = ws.getCell(row, j + 1); c.value = p[k] == null ? '' : p[k];
+        c.border = box; c.font = { size: 10, color: { argb: INK }, bold: wc };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: wc ? YEL : (zeb ? ZEBRA : 'FFFFFFFF') } }; });
+      zeb = !zeb; row++;
+    }
+    keys.forEach((k, j) => { ws.getColumn(j + 1).width = /cognome|nome|fornitore|richiesta/i.test(k) ? 20 : 13; });
+    const buf = await wb.xlsx.writeBuffer();
+    dl(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+       `LISTA_${String(rec.volo || 'VOLO').replace(/[^\w]/g, '')}_${rec.scalo}_${rec.data}.xlsx`);
+  }
+
   // ---- Import file generale (seed) ----
   async function importMaster(file) {
     const wb = await readWorkbook(file);
@@ -4067,7 +4116,7 @@ const GEN = (() => {
       <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.inizioTurno || '')}</td>
       <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.convocazione || '')}</td>
       <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.fineTurno || '')}</td>
-      <td style="padding:5px 8px;font-size:12px;text-align:center">${r.assistenza ? '<b style="color:var(--yellow-deep)">SÌ</b>' : '—'}</td>
+      <td style="padding:5px 8px;font-size:12px;text-align:center;white-space:nowrap">${r.assistenza ? '<b style="color:var(--yellow-deep)">SÌ</b> <button data-dl="1" title="Scarica lista passeggeri di questo volo" style="cursor:pointer;border:1px solid #E6CE8A;background:#FFF;color:#B07400;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;font-family:inherit">Lista</button>' : '—'}</td>
       <td style="padding:5px 8px;font-size:11px;color:var(--ink-mute)">${escapeHtml(r.stato || '')}${r.note ? '<br>' + escapeHtml(r.note) : ''}</td>
     </tr>`;
   }
@@ -4084,7 +4133,9 @@ const GEN = (() => {
       <tbody>${rows.map(genRowHtml).join('')}</tbody></table></div></div>
       <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">${rows.length} righe mostrate${rows.length !== ALL.length ? ' (su ' + ALL.length + ')' : ''} · clicca una riga per modificarla</div>`;
     const tb = box.querySelector('tbody');
-    if (tb) tb.addEventListener('click', e => { const tr = e.target.closest('tr[data-key]'); if (!tr) return; const rec = ALL.find(x => x.key === tr.dataset.key); if (rec) openGenEditor(rec, false); });
+    if (tb) tb.addEventListener('click', e => { const tr = e.target.closest('tr[data-key]'); if (!tr) return; const rec = ALL.find(x => x.key === tr.dataset.key); if (!rec) return;
+      if (e.target.closest('[data-dl]')) { e.stopPropagation(); exportFlightList(rec); return; }
+      openGenEditor(rec, false); });
   }
   function render() {
     const el = document.getElementById('gen-results'); if (!el) return;
