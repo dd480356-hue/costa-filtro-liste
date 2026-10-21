@@ -3374,6 +3374,8 @@ const GEN = (() => {
                 FAVOLOSA:'NAVI', TOSCANA:'NAVI', FORTUNA:'NAVI',
                 DELIZIOSA:'CHARTER', SERENA:'CHARTER' },
     modeLists: { NAVI:['TRF_PRE','TRF_POST'], CHARTER:['FLT_PRE'], NORMALE:['FLT_PRE'] },
+    // Soglia metier per i voli (liste Flight) : > charterMinPax pax sullo stesso volo = CHARTER, altrimenti NORMALE.
+    charterMinPax: 100,
     // Richieste particolari (colonna Note = AO) : sedia a rotelle → sbarco sempre assistito
     wheelchairRegex: 'WHEELCHAIR|WCH[RSC]|SEDIA A ROTELLE|FAUTEUIL|CARROZZINA',
     // Filtri liste (configurabili) : aeroporti italiani (Flight PRE), fornitori transfer, stati esclusi
@@ -3603,7 +3605,12 @@ const GEN = (() => {
         if (!rec.eta && eta) rec.eta = eta;
       }
     }
-    for (const rec of map.values()) rec.transito = rec.pax > 0 && rec.transitoPax >= Math.ceil(rec.pax * 0.8);
+    const thr = +RULES.charterMinPax || 100;
+    for (const rec of map.values()) {
+      rec.transito = rec.pax > 0 && rec.transitoPax >= Math.ceil(rec.pax * 0.8);
+      // Metier dei voli (liste Flight) deciso dal numero di pax sullo stesso volo, non dalla nave.
+      if (rec.modo && rec.modo !== 'NAVI') rec.modo = rec.pax > thr ? 'CHARTER' : 'NORMALE';
+    }
     return [...map.values()];
   }
 
@@ -4373,7 +4380,11 @@ const GEN = (() => {
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`),
       flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
+      sec('Voli → metier (per numero PAX)',
+        `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px">Un volo con più di <b>soglia</b> PAX è CHARTER, altrimenti NORMALE. Il tipo aereo (787/737) resta dedotto dalla capienza nei blocchi CHARTER/NORMALE.</div>` +
+        `<div>${numr('charterMinPax', 'Soglia CHARTER (PAX)')}</div>`),
       sec('Navi → metier',
+        `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px">NAVI usa i transfer. Per i voli questo valore è ignorato: conta la soglia PAX qui sopra.</div>` +
         ships + `<div style="margin-top:6px"><input id="gen-ship-new" type="text" placeholder="NOME NAVE" style="width:150px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-ship-add" class="browse" style="margin-left:6px;padding:5px 10px">+ nave</button></div>`),
       sec('Richieste particolari',
         `<label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)${hb(GEN_HELP['wheelchairRegex'])}<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`),
