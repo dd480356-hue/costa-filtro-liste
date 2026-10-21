@@ -3576,24 +3576,23 @@ const GEN = (() => {
   function computeFlights(cl, cfg) {
     const sum = cl.reduce((s, x) => s + x.pax, 0);
     const assist = sum >= cfg.threshold;
-    const first = cl[0], lastR = cl[cl.length - 1];
     const transit = cl.every(x => x.transito);
-    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0);
-      x.turnoStart = first.std || ''; x.turnoEnd = lastR.std || ''; });
+    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; });
     if (!assist) return;
-    if (transit && cfg.transitReportAtTakeoff) {
-      const cm = toMin(first.std);
-      first.convocazione = cm != null ? hhmm(cm - cfg.checkinCloseBeforeMin) : '';
-      first.inizioTurno = first.convocazione;
-      first.fineTurno = lastR.std || '';
-      first.note = 'TRANSITO: chiusura check-in → report al decollo';
-    } else {
-      const cat = flightCat(first, cfg); const rule = cfg.convByType[cat] || cfg.convByType.ALTRI;
-      const cm = toMin(first.std); const conv = cm != null ? cm - Math.round(rule.h * 60) : null;
-      first.convocazione = conv != null ? hhmm(conv) : '';
-      first.inizioTurno = conv != null ? hhmm(conv - rule.pre) : '';
-      first.fineTurno = lastR.std || '';
-      first.note = 'CONV ' + cat;
+    // Orari per OGNI volo (non raggruppati).
+    for (const x of cl) {
+      if (transit && cfg.transitReportAtTakeoff) {
+        const cm = toMin(x.std);
+        x.convocazione = cm != null ? hhmm(cm - cfg.checkinCloseBeforeMin) : '';
+        x.inizioTurno = x.convocazione;
+        x.note = 'TRANSITO: chiusura check-in → report al decollo';
+      } else {
+        const cat = flightCat(x, cfg); const rule = cfg.convByType[cat] || cfg.convByType.ALTRI;
+        const cm = toMin(x.std); const conv = cm != null ? cm - Math.round(rule.h * 60) : null;
+        x.convocazione = conv != null ? hhmm(conv) : '';
+        x.inizioTurno = conv != null ? hhmm(conv - rule.pre) : '';
+        x.note = 'CONV ' + cat;
+      }
     }
   }
   function computeNavi(cl, sens) {
@@ -3603,34 +3602,27 @@ const GEN = (() => {
     const anyFlight = cl.some(x => !x.tpt), anyTpt = cl.some(x => x.tpt), anyT2 = cl.some(x => x.terminal === 'T2');
     let assist;
     if (sens === 'A') {
-      const pureTpt = cl.every(x => x.tpt);
       if (anyTpt && RULES.navi.tptImbarcoAlways) assist = true;
       else if (scalo === 'MXP' && anyT2) assist = sum >= RULES.navi.t2ImbarcoMin;
       else assist = sum >= np(scalo, 'thrImbarco');
-      if (pureTpt) {
-        // Cluster di soli TPT : orari fissi dello scalo.
-        const conv = sc(scalo).tptImbConv, part = sc(scalo).tptImbPart;
-        first.convocazione = conv || ''; first.inizioTurno = conv || ''; first.fineTurno = part || '';
-      } else {
-        // Ci sono voli reali : convocazione dal PRIMO volo (mai dopo lo STD). TPT eventuali sono inglobati.
-        const times = cl.filter(x => !x.tpt).map(x => toMin(x.eta || x.std)).filter(v => v != null);
-        const firstT = times.length ? Math.min(...times) : null;
-        const lastT = times.length ? Math.max(...times) : null;
-        const conv = firstT != null ? firstT - np(scalo, 'imbConvBefore') : null;
-        first.convocazione = conv != null ? hhmm(conv) : ''; first.inizioTurno = first.convocazione;
-        first.fineTurno = lastT != null ? hhmm(lastT + np(scalo, 'imbBuffer')) : '';
+      // Orari per OGNI volo (non raggruppati).
+      for (const x of cl) {
+        if (x.tpt) { const conv = sc(scalo).tptImbConv; x.convocazione = conv || ''; x.inizioTurno = conv || ''; }
+        else { const etaMin = toMin(x.eta || x.std); const conv = etaMin != null ? etaMin - np(scalo, 'imbConvBefore') : null;
+          x.convocazione = conv != null ? hhmm(conv) : ''; x.inizioTurno = x.convocazione; }
       }
     } else {
-      let sb;
-      if (anyTpt) { assist = anyFlight ? true : !RULES.navi.tptSbarcoOnlyIfSharedFlight; sb = sc(scalo).tptSbarco || ''; }
-      else { assist = (scalo === 'MXP' && anyT2 && RULES.navi.t2SbarcoIgnoreThreshold) ? true : (sum >= np(scalo, 'thrSbarco')); sb = sbarcoTimeFor(scalo, toMin(first.std)); }
-      if (cl.some(x => x.wheelchair)) { assist = true; first.note = 'SEDIA A ROTELLE'; }  // sbarco con carrozzina → sempre assistito
-      first.sbarco = sb; const sm = toMin(sb);
-      first.convocazione = sm != null ? hhmm(sm - np(scalo, 'sbBusBefore')) : ''; first.inizioTurno = first.convocazione;
-      first.fineTurno = sm != null ? hhmm(sm + np(scalo, 'sbBusAfter')) : '';
+      assist = anyTpt ? (anyFlight ? true : !RULES.navi.tptSbarcoOnlyIfSharedFlight)
+        : ((scalo === 'MXP' && anyT2 && RULES.navi.t2SbarcoIgnoreThreshold) ? true : (sum >= np(scalo, 'thrSbarco')));
+      if (cl.some(x => x.wheelchair)) assist = true;  // sbarco con carrozzina → sempre assistito
+      for (const x of cl) {
+        const sb = x.tpt ? (sc(scalo).tptSbarco || '') : sbarcoTimeFor(scalo, toMin(x.std));
+        x.sbarco = sb; const sm = toMin(sb);
+        x.convocazione = sm != null ? hhmm(sm - np(scalo, 'sbBusBefore')) : ''; x.inizioTurno = x.convocazione;
+        if (x.wheelchair) x.note = 'SEDIA A ROTELLE';
+      }
     }
-    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0);
-      x.turnoStart = first.inizioTurno || first.std || ''; x.turnoEnd = first.fineTurno || lastR.std || ''; });
+    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; });
   }
   function computeEngine(recs) {
     for (const r of recs) { r.assistenza = false; r.turnoPax = r.pax; r.turnoLead = true;
@@ -3778,8 +3770,8 @@ const GEN = (() => {
       ws.getCell(row, 4).value = r.scalo;
       ws.getCell(row, 5).value = r.volo;
       ws.getCell(row, 6).value = r.destinazione || '';
-      if (r.turnoLead && r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;
-      if (r.turnoLead && r.convocazione) ws.getCell(row, 8).value = r.convocazione;
+      if (r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;      // ogni riga
+      if (r.convocazione) ws.getCell(row, 8).value = r.convocazione;    // ogni riga
       ws.getCell(row, 9).value = r.std || '';
       // FINE TURNO ADDETTO (col K) e FASCIA + EXTRA ORA (col Q) : lasciati VUOTI, compilati a mano dal gestore del generale.
       ws.getCell(row, 12).value = r.pax;
@@ -3920,9 +3912,9 @@ const GEN = (() => {
       <td style="padding:5px 8px;font-size:12px;text-align:right">${escapeHtml(r.std)}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${r.pax}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${r.turnoPax}</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:center">${r.turnoLead ? escapeHtml(r.inizioTurno || '') : ''}</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:center">${r.turnoLead ? escapeHtml(r.convocazione || '') : ''}</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:center">${r.turnoLead ? escapeHtml(r.fineTurno || '') : ''}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.inizioTurno || '')}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.convocazione || '')}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:center">${escapeHtml(r.fineTurno || '')}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:center">${r.assistenza ? '<b style="color:var(--yellow-deep)">SÌ</b>' : '—'}</td>
       <td style="padding:5px 8px;font-size:11px;color:var(--ink-mute)">${escapeHtml(r.stato || '')}${r.note ? '<br>' + escapeHtml(r.note) : ''}</td>
     </tr>`;
