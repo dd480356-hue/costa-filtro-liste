@@ -3335,6 +3335,7 @@ const GEN = (() => {
       excludedStatuses: ['OLD','DEL','CANC','CXL','CNL']
     },
     navi: {
+      foreignShips: [],   // navi « fuori d'Italia » (definite dall'utente) : a loro si applica la regola soglia+raggruppamento
       gapImbarco:60, gapSbarco:60, splitGapMin:120,
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
@@ -3533,6 +3534,7 @@ const GEN = (() => {
         const key = [datev, ship.toUpperCase(), scalo.toUpperCase(), String(volo).toUpperCase(), sens].join('|');
         let rec = map.get(key);
         if (!rec) { rec = { key, data: datev, sens, nave: ship, modo: modo || '', scalo, volo, std, eta, carrier,
+          foreign: (RULES.navi.foreignShips || []).map(x => String(x).trim().toUpperCase()).includes(String(ship).toUpperCase()),
           tpt, terminal, wheelchair: false, wheelchairPax: 0, destinazione: '', pax: 0, transitoPax: 0, transito: false, passeggeri: [] }; map.set(key, rec); }
         rec.pax++;
         if (isTransit) rec.transitoPax++;
@@ -4046,7 +4048,8 @@ const GEN = (() => {
         chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
-        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>`),
+        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`),
       flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
       sec('Navi → metier',
@@ -4138,7 +4141,7 @@ const GEN = (() => {
             try { RULES = deepMerge(clone(DEF_RULES), JSON.parse(await f.text())); saveRules(); refreshAll(); await recomputeAll(); render(); }
             catch (err) { alert('File regole non valido: ' + (err.message || err)); } t.value = ''; return; }
           if (t.dataset.r) { let v = t.type === 'checkbox' ? t.checked : (t.type === 'number' ? +t.value : t.value);
-            const UP = ['charter.itaScali', 'normale.itaScali', 'filters.italianAirports', 'filters.excludedStatuses'];
+            const UP = ['charter.itaScali', 'normale.itaScali', 'filters.italianAirports', 'filters.excludedStatuses', 'navi.foreignShips'];
             const KEEP = ['filters.transferSuppliers'];
             if (UP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
             else if (KEEP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim()).filter(Boolean);
