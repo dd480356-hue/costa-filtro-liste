@@ -1091,9 +1091,9 @@ header.app .logo{ height:60px; border-radius:16px; }
 
 <section class="tab-panel hidden" data-panel="gen">
 
-  <div class="filter-section">
-    <div class="fs-label">Parametri assistenza</div>
-    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end">
+  <details class="filter-section" open>
+    <summary class="fs-label" style="cursor:pointer">Parametri assistenza</summary>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-top:10px">
       <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia IMBARCO (min PAX)<br>
         <input type="number" id="gen-thr-imb" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
       <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia SBARCO (min PAX)<br>
@@ -1104,7 +1104,7 @@ header.app .logo{ height:60px; border-radius:16px; }
         <input type="number" id="gen-gap-sba" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
     </div>
     <div style="font-size:11px;color:var(--ink-mute);margin-top:8px">Assistenza quando il totale PAX di uno scalo (voli con scarto ≤ finestra) raggiunge la soglia. IMBARCO = liste PRE · SBARCO = Transfer POST.</div>
-  </div>
+  </details>
 
   <div class="clear-all-row" style="gap:8px;flex-wrap:wrap">
     <button class="browse" id="gen-mail" style="margin:0">Importa da email (Microsoft)</button>
@@ -3967,41 +3967,35 @@ const GEN = (() => {
        <span style="width:120px;font-size:12px">${escapeHtml(s)}</span>
        <select data-ship="${s}" style="padding:4px;border:1px solid var(--line);border-radius:6px"><option ${m === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${m === 'CHARTER' ? 'selected' : ''}>CHARTER</option></select>
        <button data-shipdel="${s}" class="clear-all-btn" style="padding:2px 7px">✕</button></div>`).join('');
-    return `
-     <div class="filter-section"><div class="fs-label">NAVI — regole generali</div>
-       ${chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito')}
-       ${chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli')}
-       ${chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)')}
-       <div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>
-     </div>
-     <div class="filter-section"><div class="fs-label">CHARTER (Deliziosa, Serena)</div>
-       <div>${numr('charter.threshold', 'Soglia PAX')}${numr('charter.gapMin', 'Finestra raggruppamento (min)')}</div>
-       ${chk('charter.transitReportAtTakeoff', 'Transito: fine turno = report al decollo')}
-       <div>${numr('charter.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>
-       <label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="charter.itaScali" value="${(c.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>
-       <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div>
-       <table style="margin-top:4px">${convRows}</table>
-       <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>
-       ${acfRows}
-     </div>
-     <div class="filter-section"><div class="fs-label">Navi → metier</div>${ships}
-       <div style="margin-top:6px"><input id="gen-ship-new" type="text" placeholder="NOME NAVE" style="width:150px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-ship-add" class="browse" style="margin-left:6px;padding:5px 10px">+ nave</button></div>
-     </div>
-     <div class="filter-section"><div class="fs-label">Richieste particolari</div>
-       <label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>
-     </div>
-     <div class="filter-section"><div class="fs-label">Filtri liste (separati da virgola)</div>
-       <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>
-       <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>
-       <label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>
-       <div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Si applica alle liste caricate dopo la modifica.</div>
-     </div>
-     <div class="filter-section"><div class="fs-label">Backup regole</div>
-       <button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>
-       <button id="gen-rules-import" class="browse" style="margin:0 0 0 6px;padding:5px 12px">Importa regole (file)</button>
-       <button id="gen-rules-default" class="clear-all-btn" style="margin-left:6px">Ripristina default</button>
-       <input id="gen-rules-import-file" type="file" accept=".json" style="display:none">
-     </div>`;
+    const sec = (t, b) => `<details class="filter-section"><summary class="fs-label" style="cursor:pointer">${t}</summary><div style="margin-top:10px">${b}</div></details>`;
+    return [
+      sec('NAVI — regole generali',
+        chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
+        chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
+        chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
+        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}</div>`),
+      sec('CHARTER (Deliziosa, Serena)',
+        `<div>${numr('charter.threshold', 'Soglia PAX')}${numr('charter.gapMin', 'Finestra raggruppamento (min)')}</div>` +
+        chk('charter.transitReportAtTakeoff', 'Transito: fine turno = report al decollo') +
+        `<div>${numr('charter.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
+        `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="charter.itaScali" value="${(c.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
+        `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRows}</table>` +
+        `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>${acfRows}`),
+      sec('Navi → metier',
+        ships + `<div style="margin-top:6px"><input id="gen-ship-new" type="text" placeholder="NOME NAVE" style="width:150px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-ship-add" class="browse" style="margin-left:6px;padding:5px 10px">+ nave</button></div>`),
+      sec('Richieste particolari',
+        `<label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`),
+      sec('Filtri liste (separati da virgola)',
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Si applica alle liste caricate dopo la modifica.</div>`),
+      sec('Backup regole',
+        `<button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>` +
+        `<button id="gen-rules-import" class="browse" style="margin:0 0 0 6px;padding:5px 12px">Importa regole (file)</button>` +
+        `<button id="gen-rules-default" class="clear-all-btn" style="margin-left:6px">Ripristina default</button>` +
+        `<input id="gen-rules-import-file" type="file" accept=".json" style="display:none">`)
+    ].join('');
   }
 
   // ---- CLOUD : login + init ----
