@@ -3336,24 +3336,21 @@ const GEN = (() => {
     },
     navi: {
       foreignShips: [],   // navi « fuori d'Italia » (definite dall'utente) : a loro si applica la regola soglia+raggruppamento
-      addettoBeforePax: 30,   // INIZIO TURNO ADDETTO = riferimento − questi minuti
-      stdAfterImbarco: 60,    // IMBARCO : STD = atterraggio volo + questi minuti
-      stdAfterSbarco: 30,     // SBARCO : STD = arrivo bus + questi minuti
       gapImbarco:60, gapSbarco:60, splitGapMin:120,
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
       // valori usati quando uno scalo non ne definisce uno proprio
-      default: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30,
+      default: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
                  tptImbConv:'', tptImbPart:'', tptSbarco:'', sbarcoTimes:[] },
       // CONFIGURAZIONE PER SCALO (orari sbarco: untilMin in minuti dalla mezzanotte; ultima riga senza untilMin = "oltre")
       scali: {
-        MXP: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30,
+        MXP: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
                tptImbConv:'11:00', tptImbPart:'11:30', tptSbarco:'13:30',
                sbarcoTimes:[{untilMin:900,t:'11:30'},{t:'13:30'}] },
-        LIN: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30,
+        LIN: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
                tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'13:00',
                sbarcoTimes:[{untilMin:900,t:'11:00'},{t:'13:00'}] },
-        FCO: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30,
+        FCO: { thrImbarco:20, thrSbarco:20, imbConvBefore:30, imbBuffer:60, sbBusBefore:30, sbBusAfter:30, addettoBeforePax:30, stdAfterImbarco:60, stdAfterSbarco:30,
                tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'11:00',
                sbarcoTimes:[{untilMin:750,t:'10:30'},{untilMin:960,t:'11:00'},{untilMin:1080,t:'13:30'},{t:'15:30'}] }
       }
@@ -3608,8 +3605,8 @@ const GEN = (() => {
       if (anyTpt && RULES.navi.tptImbarcoAlways) assist = true;
       else if (scalo === 'MXP' && anyT2) assist = sum >= RULES.navi.t2ImbarcoMin;
       else assist = sum >= np(scalo, 'thrImbarco');
-      // IMBARCO: riferimento = atterraggio volo (ETA). convocazione = atterraggio, inizio = −addettoBeforePax, STD = +stdAfterImbarco.
-      const addOff = RULES.navi.addettoBeforePax || 0, stdAfter = RULES.navi.stdAfterImbarco || 0;
+      // IMBARCO: riferimento = atterraggio volo (ETA). Offsets PER SCALO.
+      const addOff = np(scalo, 'addettoBeforePax'), stdAfter = np(scalo, 'stdAfterImbarco');
       for (const x of cl) {
         let ref;
         if (x.tpt) { ref = toMin(sc(scalo).tptImbConv);
@@ -3622,8 +3619,8 @@ const GEN = (() => {
       assist = anyTpt ? (anyFlight ? true : !RULES.navi.tptSbarcoOnlyIfSharedFlight)
         : ((scalo === 'MXP' && anyT2 && RULES.navi.t2SbarcoIgnoreThreshold) ? true : (sum >= np(scalo, 'thrSbarco')));
       if (cl.some(x => x.wheelchair)) assist = true;  // sbarco con carrozzina → sempre assistito
-      // SBARCO: riferimento = arrivo bus. convocazione = bus, inizio = −addettoBeforePax, STD = +stdAfterSbarco. FINE vuota.
-      const addOff = RULES.navi.addettoBeforePax || 0, stdAfter = RULES.navi.stdAfterSbarco || 0;
+      // SBARCO: riferimento = arrivo bus. Offsets PER SCALO. FINE vuota.
+      const addOff = np(scalo, 'addettoBeforePax'), stdAfter = np(scalo, 'stdAfterSbarco');
       for (const x of cl) {
         const sb = x.tpt ? (sc(scalo).tptSbarco || '') : sbarcoTimeFor(scalo, toMin(x.std));
         x.sbarco = sb; const ref = toMin(sb);
@@ -3981,7 +3978,10 @@ const GEN = (() => {
     sbBusAfter: 'Sbarco: minuti dopo l’arrivo del bus (fine turno).',
     tptImbConv: 'TPT imbarco: orario fisso di convocazione (HH:MM).',
     tptImbPart: 'TPT imbarco: orario fisso di partenza dall’aeroporto (HH:MM).',
-    tptSbarco: 'TPT sbarco: orario fisso (HH:MM).'
+    tptSbarco: 'TPT sbarco: orario fisso (HH:MM).',
+    addettoBeforePax: 'Minuti di anticipo dell’INIZIO TURNO ADDETTO sulla convocazione (riferimento).',
+    stdAfterImbarco: 'IMBARCO: STD = atterraggio volo + questi minuti.',
+    stdAfterSbarco: 'SBARCO: STD = arrivo bus + questi minuti.'
   };
   const GEN_HELP = {
     'navi.tptImbarcoAlways': 'Se attivo, un TPT in imbarco è SEMPRE assistito.',
@@ -4022,6 +4022,7 @@ const GEN = (() => {
           ${num('thrImbarco', 'Soglia imbarco')}${num('thrSbarco', 'Soglia sbarco')}
           ${num('imbConvBefore', 'Imb: conv −min')}${num('imbBuffer', 'Imb: buffer +min')}
           ${num('sbBusBefore', 'Sbarco: −min bus')}${num('sbBusAfter', 'Sbarco: +min bus')}
+          ${num('addettoBeforePax', 'Inizio addetto: anticipo (min)')}${num('stdAfterImbarco', 'Imbarco STD: atterraggio + (min)')}${num('stdAfterSbarco', 'Sbarco STD: arrivo bus + (min)')}
           ${tim('tptImbConv', 'TPT imb convoc.')}${tim('tptImbPart', 'TPT imb part.')}${tim('tptSbarco', 'TPT sbarco')}
         </div>
         <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari sbarco voli — voli fino alle (vuoto = oltre) → orario sbarco</div>
@@ -4067,7 +4068,7 @@ const GEN = (() => {
         chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
-        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}${numr('navi.addettoBeforePax', 'Inizio addetto: anticipo su convocazione (min)')}${numr('navi.stdAfterImbarco', 'Imbarco STD: atterraggio + (min)')}${numr('navi.stdAfterSbarco', 'Sbarco STD: arrivo bus + (min)')}</div>` +
+        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}<span class="help" title="Gli orari (inizio addetto, STD imbarco/sbarco) si impostano per scalo in « Configurazione per scalo ».">?</span></div>` +
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`),
       flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
