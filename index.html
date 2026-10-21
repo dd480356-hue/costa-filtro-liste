@@ -7,7 +7,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&family=Fira+Code:wght@500;600&display=swap" rel="stylesheet">
 
 <!-- SheetJS for reading, ExcelJS for writing (image support) -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
@@ -965,59 +965,77 @@ button { cursor: pointer; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   DIREZIONE « MODERNO CHIARO » — override finale (arrotondato, soffice, chiaro)
+   REFONTE — design system (Manrope/Inter/Fira Code, Costa navy/gold, responsive)
    ══════════════════════════════════════════════════════════════════════ */
 :root{
-  --m-accent:#2E6BB0; --m-accent-d:#1E4F8C; --m-gold:#E5A427; --m-gold-d:#C68A12;
-  --m-ink:#101828; --m-mute:#98A2B3; --m-bg:#FFFFFF; --m-surface:#FFFFFF;
-  --m-soft:#F6F9FD; --m-line:#EDF1F6; --m-radius:18px;
-  --m-shadow:0 10px 28px -16px rgba(20,45,90,.30);
-  --disp:'Manrope','Montserrat',system-ui,sans-serif;
+  --d-bg:#F4F7FB; --d-panel:#FFFFFF; --d-ink:#13213A; --d-ink2:#51607A; --d-mute:#8D9AB0;
+  --d-line:#E6ECF5; --d-soft:#F0F5FB; --d-navy:#1E4F8C; --d-navy2:#2E6BB0; --d-navyd:#15386A;
+  --d-gold:#E5A427; --d-goldd:#B07400; --d-gtint:#FCF2D6; --d-ok:#2D7A4F;
+  --d-r:16px; --d-rsm:11px; --d-sh:0 10px 30px -18px rgba(18,45,90,.35); --d-shsm:0 2px 8px -4px rgba(18,45,90,.18);
+  --d-disp:'Manrope','Montserrat',system-ui,sans-serif; --d-body:'Inter',system-ui,sans-serif; --d-mono:'Fira Code',ui-monospace,monospace;
 }
-html, body{ background:var(--m-bg); }
-body{
-  background:
-    radial-gradient(1100px circle at 110% -10%, #EFF5FC, transparent 60%),
-    radial-gradient(800px circle at -10% 110%, #FDF6E7, transparent 55%),
-    var(--m-bg);
-  color:var(--m-ink);
-}
-.wrap{ padding-block:40px 96px; }
-header.app h1, .brand h2, .fs-label{ font-family:var(--disp); }
-header.app h1{ font-weight:800; letter-spacing:-.02em; color:var(--m-accent-d); }
-.tabs{ background:var(--m-soft); border:1px solid var(--m-line); border-radius:14px; }
-.tab{ border-radius:11px; }
-.tab.active{ background:var(--m-surface); color:var(--m-accent-d); box-shadow:0 6px 16px -10px rgba(46,107,176,.55); }
-.tab .ico{ background:#EAF2FB; color:var(--m-accent); }
-.tab.active .ico{ background:var(--m-gold); color:var(--m-accent-d); }
-.result-card, .loading-card{ border-radius:var(--m-radius); border-color:var(--m-line); box-shadow:var(--m-shadow); background:var(--m-surface); }
-.filter-section{ border-radius:var(--m-radius); border-color:var(--m-line); background:var(--m-soft); }
-.dropzone{ border-radius:22px; border-color:#C3D7EF; background:var(--m-soft); padding:56px 32px; }
-.dropzone .upload-icon{ background:linear-gradient(135deg,var(--m-accent),var(--m-accent-d)); }
-.browse{ border-radius:999px; box-shadow:0 8px 18px -12px rgba(46,107,176,.6); font-weight:700; }
-.browse:hover{ background:var(--m-accent-d); }
-.clear-all-btn, .active-chip, .facet-chip, .pill, .acctbar .logout{ border-radius:999px; }
-.genbar input, .genbar select, .bar input, .bar select{ border-radius:11px; border-color:var(--m-line); }
-.results table tbody td{ padding-top:10px; padding-bottom:10px; }
-.results table thead th{ background:var(--m-soft); color:var(--m-mute); }
+html,body{background:var(--d-bg)}
+body{font-family:var(--d-body);color:var(--d-ink);background:var(--d-bg)!important}
+.wrap{max-width:1140px;padding-block:0 64px}
+.tabular,td.r,.results table td,.results table th{font-variant-numeric:tabular-nums}
+.results table td.tabular,.results table .tabular{font-family:var(--d-mono)}
+button,select,input{cursor:auto} button{cursor:pointer}
+:focus-visible{outline:2px solid var(--d-navy2);outline-offset:2px}
 
-/* — Amplificazione « Moderno » (effetto netto) — */
-body{ background:#F7FAFD !important; }
-.wrap{ max-width:1180px; }
-header.app{ padding:28px 0 22px; border-bottom:1px solid var(--m-line); }
-header.app h1{ font-size:28px !important; line-height:1.05; }
-header.app .sub{ letter-spacing:.16em; }
-header.app .logo{ height:60px; border-radius:16px; }
-.tabs{ padding:6px; gap:6px; margin-bottom:28px; }
-.tab{ padding:16px 24px; font-size:15px; border-radius:13px; }
-.result-card{ border-radius:20px !important; box-shadow:0 14px 40px -22px rgba(20,45,90,.35) !important; padding:0; }
-.filter-section{ border-radius:18px !important; padding:18px 20px; }
-.dropzone{ border-radius:26px !important; padding:72px 36px !important; border-width:2px; }
-.dropzone h2{ font-family:var(--disp); font-size:22px; }
-.browse{ padding:12px 22px; }
-.fs-label{ letter-spacing:.02em; }
-.kpi, .stat{ border-radius:18px; }
-.pill{ padding:3px 11px; }
+/* App bar */
+header.app{position:sticky;top:env(safe-area-inset-top,0);z-index:30;background:rgba(255,255,255,.9);
+  -webkit-backdrop-filter:saturate(1.3) blur(10px);backdrop-filter:saturate(1.3) blur(10px);
+  border-bottom:1px solid var(--d-line);padding:12px 0;margin-bottom:6px}
+header.app .logo{height:46px;width:auto;border-radius:13px}
+header.app h1{font-family:var(--d-disp);font-weight:800;font-size:22px;letter-spacing:-.02em;color:var(--d-navyd)}
+header.app .sub{letter-spacing:.14em}
+.acctbar .logout{border-radius:999px;border-color:var(--d-line)}
+.acctbar .logout:hover{border-color:var(--d-gold);color:var(--d-goldd)}
+
+/* Tabs */
+.tabs{background:var(--d-soft);border:1px solid var(--d-line);border-radius:14px;padding:6px;gap:6px;margin:16px 0 22px}
+.tab{border-radius:11px;font-family:var(--d-disp);font-weight:700;padding:14px 20px;transition:background .15s,color .15s,box-shadow .15s}
+.tab .ico{background:#E7EFFA;color:var(--d-navy2);border-radius:7px}
+.tab.active{background:#fff;color:var(--d-navyd);box-shadow:var(--d-shsm)}
+.tab.active .ico{background:var(--d-gold);color:var(--d-navyd)}
+
+/* Cards & sections */
+.result-card,.loading-card{border-radius:var(--d-r);border-color:var(--d-line);box-shadow:var(--d-sh);background:var(--d-panel)}
+.filter-section{border-radius:var(--d-r);border-color:var(--d-line);background:var(--d-panel);box-shadow:var(--d-shsm)}
+.filter-section.compact{box-shadow:none;background:var(--d-soft)}
+.fs-label{font-family:var(--d-disp);letter-spacing:.01em}
+details.filter-section>summary.fs-label{cursor:pointer}
+details.filter-section>summary.fs-label:hover{color:var(--d-navy)}
+
+/* Dropzone */
+.dropzone{border-radius:22px;border:2px dashed #BBD2EE;background:var(--d-panel);padding:52px 28px}
+.dropzone .upload-icon{background:linear-gradient(145deg,var(--d-navy2),var(--d-navyd))}
+.dropzone h2{font-family:var(--d-disp);font-weight:700}
+
+/* Buttons */
+.browse{background:var(--d-navy2);color:#fff;border:none;border-radius:999px;padding:11px 20px;font-weight:700;box-shadow:0 8px 18px -10px rgba(46,107,176,.7)}
+.browse:hover{background:var(--d-navyd)}
+.clear-all-btn,.active-chip,.facet-chip,.pill{border-radius:999px}
+.clear-all-btn:hover{border-color:var(--d-gold);color:var(--d-goldd)}
+
+/* Filter bar */
+.genbar input,.genbar select,.bar input,.bar select{border-radius:11px;border-color:var(--d-line);padding:10px 12px;font-size:13px}
+
+/* Tables */
+.results table thead th{background:var(--d-soft);color:var(--d-mute);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
+.results table tbody td{padding:10px 12px}
+.results table tbody tr:hover td{background:var(--d-soft)}
+
+/* Responsive mobile */
+@media(max-width:680px){
+  .wrap{padding-left:16px;padding-right:16px}
+  header.app{flex-wrap:wrap;gap:10px}
+  header.app h1{font-size:18px}
+  .acctbar .who,.acctbar #acct-who{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab{padding:12px}
+  .dropzone{padding:40px 18px}
+  .genbar input{min-width:0;width:100%}
+}
 </style>
 </head>
 <body>
