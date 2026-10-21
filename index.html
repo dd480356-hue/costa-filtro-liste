@@ -3623,9 +3623,10 @@ const GEN = (() => {
       for (const x of cl) {
         const sb = x.tpt ? (sc(scalo).tptSbarco || '') : sbarcoTimeFor(scalo, toMin(x.std));
         x.sbarco = sb; const sm = toMin(sb);
-        const convMin = sm != null ? sm - np(scalo, 'sbBusBefore') : null;
-        x.convocazione = convMin != null ? hhmm(convMin) : '';
-        x.inizioTurno = convMin != null ? hhmm(convMin - addOff) : '';
+        // Turno sbarco basato sull'arrivo del bus (transfer): inizio = bus − addettoBeforePax, fine = bus + sbBusAfter.
+        x.convocazione = sm != null ? hhmm(sm) : '';                      // convocazione pax = arrivo bus
+        x.inizioTurno = sm != null ? hhmm(sm - addOff) : '';             // 30 prima
+        x.fineTurno = sm != null ? hhmm(sm + np(scalo, 'sbBusAfter')) : '';  // 30 dopo (fine turno NOTA)
         if (x.wheelchair) x.note = 'SEDIA A ROTELLE';
       }
     }
@@ -3649,8 +3650,8 @@ const GEN = (() => {
       if (cl.length) clusters.push(cl);
       for (const cluster of clusters) { if (flightCfg) computeFlights(cluster, flightCfg); else computeNavi(cluster, sens); }
     }
-    // FINE TURNO ADDETTO non si conosce ancora → mai mostrata/esportata.
-    for (const r of recs) { r.fineTurno = ''; r.turnoEnd = ''; }
+    // FINE TURNO ADDETTO: nota solo per lo SBARCO navi (arrivo bus + 30). Altrove sconosciuta → vuota.
+    for (const r of recs) { if (!((r.modo === 'NAVI' || r.modo === '') && r.sens === 'P')) r.fineTurno = ''; r.turnoEnd = ''; }
   }
   async function recomputeAll() { ALL = await dbAll(); computeEngine(ALL); }
 
@@ -3780,7 +3781,8 @@ const GEN = (() => {
       if (r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;      // ogni riga
       if (r.convocazione) ws.getCell(row, 8).value = r.convocazione;    // ogni riga
       ws.getCell(row, 9).value = r.std || '';
-      // FINE TURNO ADDETTO (col K) e FASCIA + EXTRA ORA (col Q) : lasciati VUOTI, compilati a mano dal gestore del generale.
+      if (r.fineTurno) ws.getCell(row, 11).value = r.fineTurno;   // FINE TURNO: solo sbarco navi (arrivo bus + 30)
+      // FASCIA + EXTRA ORA (col Q) : lasciata VUOTA, compilata a mano.
       ws.getCell(row, 12).value = r.pax;
       if (r.assistenza && r.turnoLead) {
         ws.getCell(row, 13).value = '1 ASSISTENTE';
