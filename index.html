@@ -1000,6 +1000,24 @@ header.app h1{ font-weight:800; letter-spacing:-.02em; color:var(--m-accent-d); 
 .genbar input, .genbar select, .bar input, .bar select{ border-radius:11px; border-color:var(--m-line); }
 .results table tbody td{ padding-top:10px; padding-bottom:10px; }
 .results table thead th{ background:var(--m-soft); color:var(--m-mute); }
+
+/* — Amplificazione « Moderno » (effetto netto) — */
+body{ background:#F7FAFD !important; }
+.wrap{ max-width:1180px; }
+header.app{ padding:28px 0 22px; border-bottom:1px solid var(--m-line); }
+header.app h1{ font-size:28px !important; line-height:1.05; }
+header.app .sub{ letter-spacing:.16em; }
+header.app .logo{ height:60px; border-radius:16px; }
+.tabs{ padding:6px; gap:6px; margin-bottom:28px; }
+.tab{ padding:16px 24px; font-size:15px; border-radius:13px; }
+.result-card{ border-radius:20px !important; box-shadow:0 14px 40px -22px rgba(20,45,90,.35) !important; padding:0; }
+.filter-section{ border-radius:18px !important; padding:18px 20px; }
+.dropzone{ border-radius:26px !important; padding:72px 36px !important; border-width:2px; }
+.dropzone h2{ font-family:var(--disp); font-size:22px; }
+.browse{ padding:12px 22px; }
+.fs-label{ letter-spacing:.02em; }
+.kpi, .stat{ border-radius:18px; }
+.pill{ padding:3px 11px; }
 </style>
 </head>
 <body>
@@ -1096,6 +1114,86 @@ header.app h1{ font-weight:800; letter-spacing:-.02em; color:var(--m-accent-d); 
     <button class="clear-all-btn" id="gen-clear">✕ Svuota memoria generale</button>
     <input type="file" id="gen-import-file" accept=".xlsx,.xlsm" style="display:none">
   </div>
+
+  <details class="filter-section" id="gen-legend" style="margin-bottom:14px">
+    <summary style="cursor:pointer;font-weight:700;color:var(--blue);font-size:13px">Legenda e regole</summary>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:16px;font-size:13px;color:var(--ink-soft)">
+
+      <div>
+        <div class="fs-label">Significato delle colonne</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 22px;margin-top:6px">
+          <div><b style="color:var(--blue-darker)">Data</b> — giorno del volo / transfer.</div>
+          <div><b style="color:var(--blue-darker)">Metier</b> — NAVI (solo transfer) o CHARTER (solo voli).</div>
+          <div><b style="color:var(--blue-darker)">A/P</b> — IMBARCO (arrivo pax, liste PRE) o SBARCO (Transfer POST).</div>
+          <div><b style="color:var(--blue-darker)">Nave</b> — nome della nave.</div>
+          <div><b style="color:var(--blue-darker)">Scalo</b> — aeroporto di assistenza (TPT = bus, T2 = Terminal 2 MXP).</div>
+          <div><b style="color:var(--blue-darker)">Volo</b> — numero volo, o TPT per un bus.</div>
+          <div><b style="color:var(--blue-darker)">STD</b> — ora del volo allo scalo: arrivo per imbarco, partenza per sbarco.</div>
+          <div><b style="color:var(--blue-darker)">Pax</b> — passeggeri assistiti su quel volo.</div>
+          <div><b style="color:var(--blue-darker)">Pax turno</b> — totale pax del turno (voli raggruppati).</div>
+          <div><b style="color:var(--blue-darker)">Inizio / Convoc / Fine</b> — inizio turno, convocazione, fine turno.</div>
+          <div><b style="color:var(--blue-darker)">Ass.</b> — SÌ se è prevista assistenza.</div>
+          <div><b style="color:var(--blue-darker)">Stato / Nota</b> — provvisoria/definitiva (≤48h) + note (SEDIA A ROTELLE, CONV &lt;tipo&gt;, TRANSITO).</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="fs-label">Regole NAVI <span class="pill">transfer · SVN/GOA</span></div>
+        <ul style="margin:8px 0 0 18px;line-height:1.7">
+          <li>Navi: Smeralda, Fascinosa, Pacifica, Diadema, Favolosa, Toscana, Fortuna. Solo <b>Transfer</b> (PRE=imbarco, POST=sbarco).</li>
+          <li>Assistenza se il totale pax dello scalo ≥ <b>soglia</b> (def. 20). Voli dello stesso scalo con scarto ≤ <b>60 min</b> raggruppati; turno spezzato solo se ≥ <b>2 h</b>.</li>
+          <li><b>TPT imbarco</b>: sempre assistito. <b>TPT sbarco</b>: solo se nel bus ci sono anche voli.</li>
+          <li><b>T2 Malpensa</b>: imbarco assistito da <b>15</b> pax; sbarco <b>sempre</b>.</li>
+          <li><b>Sedia a rotelle</b> (col. Note) in sbarco → assistenza sempre.</li>
+          <li>Turno imbarco: convocazione = arrivo 1° volo − 30 min; fine = ultimo arrivo + 1 h. Sbarco: inizio = sbarco bus − 30 min; fine = + 30 min.</li>
+        </ul>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:10px">
+          <div>
+            <div style="font-weight:700;font-size:11px;color:var(--ink-mute);margin-bottom:4px">Orari sbarco (ora volo → sbarco)</div>
+            <table style="border-collapse:collapse;font-size:12px;width:100%">
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>MXP/MX1</b></td><td style="border:1px solid var(--line);padding:4px 8px">≤15:00 → 11:30 · oltre → 13:30</td></tr>
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>LIN</b></td><td style="border:1px solid var(--line);padding:4px 8px">≤15:00 → 11:00 · oltre → 13:00</td></tr>
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>FCO</b></td><td style="border:1px solid var(--line);padding:4px 8px">12:30→10:30 · ≤16:00→11:00 · ≤18:00→13:30 · oltre→15:30</td></tr>
+            </table>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:11px;color:var(--ink-mute);margin-bottom:4px">Orari TPT (imbarco conv/part · sbarco)</div>
+            <table style="border-collapse:collapse;font-size:12px;width:100%">
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>LIN</b></td><td style="border:1px solid var(--line);padding:4px 8px">11:30 / 12:00 · 13:00</td></tr>
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>MXP/MX1</b></td><td style="border:1px solid var(--line);padding:4px 8px">11:00 / 11:30 · 13:30</td></tr>
+              <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>FCO</b></td><td style="border:1px solid var(--line);padding:4px 8px">11:30 / 12:00 · 11:00</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="fs-label">Regole CHARTER <span class="pill" style="background:var(--yellow-deep)">voli · scali IT</span></div>
+        <ul style="margin:8px 0 0 18px;line-height:1.7">
+          <li>Navi: Deliziosa, Serena. Solo <b>Flight List PRE</b>, scali italiani.</li>
+          <li>Assistenza se il volo ha <b>19–20 pax</b> (colonne transito: Origine 6, poi 5). Voli stesso scalo ≤ 1 h si sommano.</li>
+          <li>Pax in transito → assistente prende chiusura check-in − 10 min; fine = report al decollo.</li>
+          <li>Convocazione = STD − ore; inizio = convocazione − 30 min.</li>
+        </ul>
+        <table style="border-collapse:collapse;font-size:12px;margin-top:8px;max-width:420px">
+          <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>787</b></td><td style="border:1px solid var(--line);padding:4px 8px">− 4 h</td><td style="border:1px solid var(--line);padding:4px 8px"><b>CX</b></td><td style="border:1px solid var(--line);padding:4px 8px">− 4 h</td></tr>
+          <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>737</b></td><td style="border:1px solid var(--line);padding:4px 8px">− 3 h</td><td style="border:1px solid var(--line);padding:4px 8px"><b>ITA (LIN/MXP/FCO)</b></td><td style="border:1px solid var(--line);padding:4px 8px">− 3 h</td></tr>
+          <tr><td style="border:1px solid var(--line);padding:4px 8px"><b>Altri scali</b></td><td style="border:1px solid var(--line);padding:4px 8px">− 2:30</td><td style="border:1px solid var(--line);padding:4px 8px" colspan="2">es. 787 ore 11:00 → convoc 07:00, inizio 06:30</td></tr>
+        </table>
+      </div>
+
+      <div>
+        <div class="fs-label">Regole generali <span class="pill" style="background:var(--ok)">filtri · stati</span></div>
+        <ul style="margin:8px 0 0 18px;line-height:1.7">
+          <li><b>MX1 = MXP</b> (stesso scalo).</li>
+          <li>Fornitori transfer: <b>GIOCO VIAGGI</b> (MXP/MX1/LIN) · <b>COSTA MED</b> (FCO). « COSTAMED LEX » escluso.</li>
+          <li>Stati esclusi: OLD, DELETE/DEL, CANCELED/CANC/CXL/CNL. Configurabili nei parametri.</li>
+          <li>Liste <b>definitive (update)</b> arrivano 48 h prima e sostituiscono le provvisorie.</li>
+          <li>Doppione = stessa data + nave + scalo + volo + senso → chiede mantieni / sostituisci / elimina.</li>
+        </ul>
+      </div>
+    </div>
+  </details>
 
   <div class="results" id="gen-results"></div>
 </section>
@@ -1248,7 +1346,7 @@ const OPTIONAL_TRANSFER_COLUMNS = new Set([
 
 // Fournisseurs gardés (nom exact, espaces ignorés) : COSTAMED et GIOCO VIAGGI.
 // « COSTAMED LEX » est exclu ; « GIOCOVIAGGI » (sans espace) = GIOCO VIAGGI.
-const TRANSFER_SUPPLIERS = ['COSTAMED', 'GIOCO VIAGGI'];
+let TRANSFER_SUPPLIERS = ['COSTAMED', 'GIOCO VIAGGI'];
 const TRANSFER_SUPPLIER = 'COSTAMED + GIOCO VIAGGI';  // libellé affiché
 const supplierKey = v => String(v || '').toUpperCase().replace(/\s+/g, '');
 const SUPPLIER_KEYS = new Set(TRANSFER_SUPPLIERS.map(supplierKey));
@@ -1274,10 +1372,28 @@ function transferKeep(row) {
   if (sup === CM_KEY && apts.some(a => TRANSFER_CM_AIRPORTS.has(a))) return true;
   return false;
 }
-// Statuts exclus : OLD, DELETE/DELETED/DEL, CANCELED/CANCELLED/CANC/CXL/CNL
+// Statuts exclus (configurable) : token = match esatto O prefisso. Default OLD / DEL* / CANC* / CXL / CNL.
+let EXCLUDED_STATUSES = ['OLD', 'DEL', 'CANC', 'CXL', 'CNL'];
 function isExcludedStatus(row) {
   const st = String(row['StatCd'] || '').trim().toUpperCase();
-  return st === 'OLD' || st.startsWith('DEL') || st.startsWith('CANC') || st === 'CXL' || st === 'CNL';
+  return EXCLUDED_STATUSES.some(t => st === t || st.startsWith(t));
+}
+// Applica la configurazione filtri (aeroporti IT, fornitori transfer, stati esclusi)
+// mutando in posto i set/array usati dai filtri. Chiamata da GEN all'avvio e ad ogni modifica.
+function applyFilterCfg(cfg) {
+  cfg = cfg || {};
+  if (Array.isArray(cfg.italianAirports) && cfg.italianAirports.length) {
+    ITALIAN_AIRPORTS.clear();
+    for (const a of cfg.italianAirports) { const v = String(a).trim().toUpperCase(); if (v) ITALIAN_AIRPORTS.add(v); }
+  }
+  if (Array.isArray(cfg.transferSuppliers) && cfg.transferSuppliers.length) {
+    TRANSFER_SUPPLIERS = cfg.transferSuppliers.map(s => String(s).trim()).filter(Boolean);
+    SUPPLIER_KEYS.clear();
+    for (const s of TRANSFER_SUPPLIERS) SUPPLIER_KEYS.add(supplierKey(s));
+  }
+  if (Array.isArray(cfg.excludedStatuses) && cfg.excludedStatuses.length) {
+    EXCLUDED_STATUSES = cfg.excludedStatuses.map(s => String(s).trim().toUpperCase()).filter(Boolean);
+  }
 }
 // "+39333 +39333" → "+39333" (le fichier répète souvent le même numéro)
 function cleanPhone(v) {
@@ -3191,6 +3307,12 @@ const GEN = (() => {
     modeLists: { NAVI:['TRF_PRE','TRF_POST'], CHARTER:['FLT_PRE'] },
     // Richieste particolari (colonna Note = AO) : sedia a rotelle → sbarco sempre assistito
     wheelchairRegex: 'WHEELCHAIR|WCH[RSC]|SEDIA A ROTELLE|FAUTEUIL|CARROZZINA',
+    // Filtri liste (configurabili) : aeroporti italiani (Flight PRE), fornitori transfer, stati esclusi
+    filters: {
+      italianAirports: ['FCO','CIA','MXP','LIN','BGY','VCE','TSF','VRN','TRS','BLQ','PMF','FLR','PSA','TRN','CUF','GOA','AOI','PSR','NAP','QSR','BRI','BDS','FOG','SUF','REG','VST','CTA','PMO','TPS','CIY','CAG','OLB','AHO','PEG'],
+      transferSuppliers: ['COSTAMED','GIOCO VIAGGI'],
+      excludedStatuses: ['OLD','DEL','CANC','CXL','CNL']
+    },
     navi: {
       gapImbarco:60, gapSbarco:60, splitGapMin:120,
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
@@ -3867,6 +3989,12 @@ const GEN = (() => {
      <div class="filter-section"><div class="fs-label">Richieste particolari</div>
        <label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>
      </div>
+     <div class="filter-section"><div class="fs-label">Filtri liste (separati da virgola)</div>
+       <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>
+       <label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>
+       <label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>
+       <div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Si applica alle liste caricate dopo la modifica.</div>
+     </div>
      <div class="filter-section"><div class="fs-label">Backup regole</div>
        <button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>
        <button id="gen-rules-import" class="browse" style="margin:0 0 0 6px;padding:5px 12px">Importa regole (file)</button>
@@ -3912,6 +4040,7 @@ const GEN = (() => {
   // ---- Init UI ----
   async function init() {
     if (cloudConfigured()) { try { await initCloud(); } catch (e) { console.error('cloud init', e); } }
+    try { applyFilterCfg(RULES.filters); } catch (e) {}
     if (CLOUD) {
       const ab = document.getElementById('acctbar'), who = document.getElementById('acct-who'),
             lo = document.getElementById('acct-logout'), mm = document.getElementById('meta-mode');
@@ -3935,7 +4064,7 @@ const GEN = (() => {
         dsum.textContent = 'Regole avanzate — NAVI, CHARTER, tipi aereo, navi→metier';
         const dwrap = document.createElement('div'); det.appendChild(dsum); det.appendChild(dwrap); host.appendChild(det);
         const syncTop = () => { gi.value = RULES.navi.default.thrImbarco; gs.value = RULES.navi.default.thrSbarco; ggi.value = RULES.navi.gapImbarco; ggs.value = RULES.navi.gapSbarco; };
-        const refreshAll = () => { dwrap.innerHTML = advancedEditorHtml(); if (scaliWrap) scaliWrap.innerHTML = scaliEditorHtml(); syncTop(); };
+        const refreshAll = () => { try { applyFilterCfg(RULES.filters); } catch (e) {} dwrap.innerHTML = advancedEditorHtml(); if (scaliWrap) scaliWrap.innerHTML = scaliEditorHtml(); syncTop(); };
         const refreshAdv = () => { dwrap.innerHTML = advancedEditorHtml(); };
         const rebuildAcf = () => { const m = {}; dwrap.querySelectorAll('.acf-row').forEach(r => { const v = r.querySelector('.acf-volo').value.trim(); const tp = r.querySelector('.acf-tipo').value; if (v) m[v] = tp; }); RULES.charter.aircraftByFlight = m; };
         refreshAdv();
@@ -3945,8 +4074,12 @@ const GEN = (() => {
             try { RULES = deepMerge(clone(DEF_RULES), JSON.parse(await f.text())); saveRules(); refreshAll(); await recomputeAll(); render(); }
             catch (err) { alert('File regole non valido: ' + (err.message || err)); } t.value = ''; return; }
           if (t.dataset.r) { let v = t.type === 'checkbox' ? t.checked : (t.type === 'number' ? +t.value : t.value);
-            if (t.dataset.r === 'charter.itaScali') v = String(t.value).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-            setPath(RULES, t.dataset.r, v); }
+            const UP = ['charter.itaScali', 'filters.italianAirports', 'filters.excludedStatuses'];
+            const KEEP = ['filters.transferSuppliers'];
+            if (UP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            else if (KEEP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim()).filter(Boolean);
+            setPath(RULES, t.dataset.r, v);
+            if (t.dataset.r.startsWith('filters.')) applyFilterCfg(RULES.filters); }
           else if (t.dataset.conv) { const o = RULES.charter.convByType[t.dataset.conv] || (RULES.charter.convByType[t.dataset.conv] = {}); o[t.dataset.ck] = +t.value; }
           else if (t.dataset.ship) { RULES.shipMode[t.dataset.ship] = t.value; }
           else if (t.classList.contains('acf-volo') || t.classList.contains('acf-tipo')) { rebuildAcf(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
