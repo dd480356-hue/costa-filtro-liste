@@ -981,6 +981,9 @@ body{font-family:var(--d-body);color:var(--d-ink);background:var(--d-bg)!importa
 .results table td.tabular,.results table .tabular{font-family:var(--d-mono)}
 button,select,input{cursor:auto} button{cursor:pointer}
 :focus-visible{outline:2px solid var(--d-navy2);outline-offset:2px}
+.help{display:inline-grid;place-items:center;width:15px;height:15px;margin-left:5px;border-radius:50%;
+  background:var(--d-soft);border:1px solid var(--d-line);color:var(--d-navy2);font-size:10px;font-weight:700;cursor:help;vertical-align:middle;font-family:var(--d-body)}
+.help:hover{background:var(--d-navy2);color:#fff;border-color:var(--d-navy2)}
 
 /* App bar */
 header.app{position:sticky;top:env(safe-area-inset-top,0);z-index:30;background:rgba(255,255,255,.9);
@@ -1112,13 +1115,13 @@ details.filter-section>summary.fs-label:hover{color:var(--d-navy)}
   <details class="filter-section" open>
     <summary class="fs-label" style="cursor:pointer">Parametri assistenza</summary>
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-top:10px">
-      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia IMBARCO (min PAX)<br>
+      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia IMBARCO (min PAX)<span class="help" title="Soglia PAX imbarco di default (usata se uno scalo non ne definisce una propria).">?</span><br>
         <input type="number" id="gen-thr-imb" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
-      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia SBARCO (min PAX)<br>
+      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Soglia SBARCO (min PAX)<span class="help" title="Soglia PAX sbarco di default.">?</span><br>
         <input type="number" id="gen-thr-sba" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
-      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Finestra turno IMBARCO (min)<br>
+      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Finestra turno IMBARCO (min)<span class="help" title="Scarto massimo (minuti) tra voli in imbarco per raggrupparli nello stesso turno.">?</span><br>
         <input type="number" id="gen-gap-imb" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
-      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Finestra turno SBARCO (min)<br>
+      <label style="font-size:12px;font-weight:600;color:var(--ink-soft)">Finestra turno SBARCO (min)<span class="help" title="Scarto massimo (minuti) tra voli in sbarco per raggrupparli nello stesso turno.">?</span><br>
         <input type="number" id="gen-gap-sba" min="1" style="width:90px;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit"></label>
     </div>
     <div style="font-size:11px;color:var(--ink-mute);margin-top:8px">Assistenza quando il totale PAX di uno scalo (voli con scarto ≤ finestra) raggiunge la soglia. IMBARCO = liste PRE · SBARCO = Transfer POST.</div>
@@ -3939,11 +3942,44 @@ const GEN = (() => {
   }
 
   // ---- Editor config per scalo ----
+  // Aiuti (tooltip ?) per i campi dei parametri
+  const hb = (txt) => txt ? `<span class="help" title="${escapeHtml(txt)}">?</span>` : '';
+  const SCALO_HELP = {
+    thrImbarco: 'Soglia: PAX minimi in imbarco perché questo scalo abbia assistenza.',
+    thrSbarco: 'Soglia: PAX minimi in sbarco perché questo scalo abbia assistenza.',
+    imbConvBefore: 'Imbarco: minuti prima dell’arrivo del primo volo per convocare l’addetto.',
+    imbBuffer: 'Imbarco: minuti dopo l’ultimo arrivo per la fine turno (ritardi/bagagli).',
+    sbBusBefore: 'Sbarco: minuti prima dell’arrivo del bus (inizio turno).',
+    sbBusAfter: 'Sbarco: minuti dopo l’arrivo del bus (fine turno).',
+    tptImbConv: 'TPT imbarco: orario fisso di convocazione (HH:MM).',
+    tptImbPart: 'TPT imbarco: orario fisso di partenza dall’aeroporto (HH:MM).',
+    tptSbarco: 'TPT sbarco: orario fisso (HH:MM).'
+  };
+  const GEN_HELP = {
+    'navi.tptImbarcoAlways': 'Se attivo, un TPT in imbarco è SEMPRE assistito.',
+    'navi.tptSbarcoOnlyIfSharedFlight': 'TPT in sbarco assistito solo se nel bus ci sono anche pax con voli; se soli, niente assistente.',
+    'navi.t2SbarcoIgnoreThreshold': 'Terminal 2 Malpensa in sbarco: sempre assistito, ignora la soglia.',
+    'navi.t2ImbarcoMin': 'Terminal 2 Malpensa in imbarco: assistito solo a partire da questo numero di PAX (es. 15).',
+    'navi.splitGapMin': 'Se tra due voli dello stesso scalo c’è più di questi minuti, il turno viene spezzato.',
+    'charter.threshold': 'PAX minimi perché un volo charter abbia assistenza (19–20).',
+    'charter.gapMin': 'Scarto massimo (minuti) per raggruppare voli charter dello stesso scalo.',
+    'charter.transitReportAtTakeoff': 'Transito: il turno finisce con l’invio del report a Costa al decollo.',
+    'charter.checkinCloseBeforeMin': 'Transito: inizio turno = chiusura check-in meno questi minuti.',
+    'charter.itaScali': 'Scali considerati « ITA » per la convocazione charter (−3 h).',
+    'wheelchairRegex': 'Parole chiave (separate da |) per rilevare la sedia a rotelle nella colonna Note.',
+    'filters.italianAirports': 'Aeroporti italiani tenuti nel filtro Flight List PRE (passeggeri che transitano).',
+    'filters.transferSuppliers': 'Fornitori tenuti nei transfer (es. COSTAMED, GIOCO VIAGGI).',
+    'filters.excludedStatuses': 'Stati da escludere dall’ultima colonna (match esatto o prefisso), es. OLD, DEL, CANC, CXL, CNL.',
+    'thrImbarco-def': 'Soglia PAX imbarco di default (usata se uno scalo non ne definisce una propria).',
+    'thrSbarco-def': 'Soglia PAX sbarco di default.',
+    'gapImbarco': 'Scarto massimo (minuti) tra voli in imbarco per raggrupparli nello stesso turno.',
+    'gapSbarco': 'Scarto massimo (minuti) tra voli in sbarco per raggrupparli nello stesso turno.'
+  };
   function scaliEditorHtml() {
     const scali = RULES.navi.scali || {};
     const card = (code, c) => {
-      const num = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}<br><input data-sc="${code}" data-k="${k}" type="number" value="${c[k] == null ? '' : c[k]}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
-      const tim = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}<br><input data-sc="${code}" data-k="${k}" type="text" placeholder="HH:MM" value="${c[k] || ''}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
+      const num = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}${hb(SCALO_HELP[k])}<br><input data-sc="${code}" data-k="${k}" type="number" value="${c[k] == null ? '' : c[k]}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
+      const tim = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}${hb(SCALO_HELP[k])}<br><input data-sc="${code}" data-k="${k}" type="text" placeholder="HH:MM" value="${c[k] || ''}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
       const rows = (c.sbarcoTimes || []).map((e, i) => `<tr>
         <td style="padding:2px"><input data-sc="${code}" data-sbi="${i}" data-sbk="until" type="text" placeholder="oltre" value="${e.untilMin != null ? hhmm(e.untilMin) : ''}" style="width:66px;padding:3px;border:1px solid var(--line);border-radius:6px"></td>
         <td style="padding:2px;color:var(--ink-mute)">→</td>
@@ -3970,8 +4006,8 @@ const GEN = (() => {
   function getPath(obj, path) { return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj); }
   function advancedEditorHtml() {
     const R = RULES, c = R.charter;
-    const chk = (p, lbl) => `<label style="display:block;font-size:12px;margin:3px 0"><input type="checkbox" data-r="${p}" ${getPath(R, p) ? 'checked' : ''}> ${lbl}</label>`;
-    const numr = (p, lbl, step) => `<label style="font-size:11px;color:var(--ink-soft);margin:0 12px 6px 0;display:inline-block">${lbl}<br><input type="number" ${step ? `step="${step}"` : ''} data-r="${p}" value="${getPath(R, p) == null ? '' : getPath(R, p)}" style="width:80px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
+    const chk = (p, lbl) => `<label style="display:block;font-size:12px;margin:3px 0"><input type="checkbox" data-r="${p}" ${getPath(R, p) ? 'checked' : ''}> ${lbl}${hb(GEN_HELP[p])}</label>`;
+    const numr = (p, lbl, step) => `<label style="font-size:11px;color:var(--ink-soft);margin:0 12px 6px 0;display:inline-block">${lbl}${hb(GEN_HELP[p])}<br><input type="number" ${step ? `step="${step}"` : ''} data-r="${p}" value="${getPath(R, p) == null ? '' : getPath(R, p)}" style="width:80px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
     const TYPES = ['787', '737', 'ITA', 'CX', 'ALTRI'];
     const convRows = Object.entries(c.convByType).map(([tp, r]) => `<tr><td style="padding:2px 8px;font-weight:600">${tp}</td>
        <td style="padding:2px"><input type="number" step="0.5" data-conv="${tp}" data-ck="h" value="${r.h}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> h prima</td>
@@ -3996,17 +4032,17 @@ const GEN = (() => {
         `<div>${numr('charter.threshold', 'Soglia PAX')}${numr('charter.gapMin', 'Finestra raggruppamento (min)')}</div>` +
         chk('charter.transitReportAtTakeoff', 'Transito: fine turno = report al decollo') +
         `<div>${numr('charter.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
-        `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="charter.itaScali" value="${(c.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
+        `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)${hb(GEN_HELP['charter.itaScali'])}<br><input type="text" data-r="charter.itaScali" value="${(c.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
         `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRows}</table>` +
         `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (se vuoto: CX dal vettore · ITA dallo scalo · sennò ALTRI)</div>${acfRows}`),
       sec('Navi → metier',
         ships + `<div style="margin-top:6px"><input id="gen-ship-new" type="text" placeholder="NOME NAVE" style="width:150px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-ship-add" class="browse" style="margin-left:6px;padding:5px 10px">+ nave</button></div>`),
       sec('Richieste particolari',
-        `<label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`),
+        `<label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)${hb(GEN_HELP['wheelchairRegex'])}<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`),
       sec('Filtri liste (separati da virgola)',
-        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti${hb(GEN_HELP['filters.italianAirports'])}<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti${hb(GEN_HELP['filters.transferSuppliers'])}<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)${hb(GEN_HELP['filters.excludedStatuses'])}<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
         `<div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Si applica alle liste caricate dopo la modifica.</div>`),
       sec('Backup regole',
         `<button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>` +
