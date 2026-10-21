@@ -1138,7 +1138,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--d-navy2);box-shadow:0
 
   <div class="rules">
     <div class="rule-card featured">
-      <div class="kicker">✈ Flight List PRE</div>
+      <div class="kicker">Flight List PRE</div>
       <h4>Aeroporti italiani</h4>
       <p>Restano i passeggeri che transitano da <b>qualsiasi aeroporto italiano</b>, con la rotta italiana completa. Accetta anche i file <code style="font-family:inherit;font-weight:700">LISTA_*</code>.</p>
       <div class="ships">
@@ -1146,11 +1146,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--d-navy2);box-shadow:0
       </div>
     </div>
     <div class="rule-card featured">
-      <div class="kicker">🚐 Transfer List PRE / POST</div>
+      <div class="kicker">Transfer List PRE / POST</div>
       <h4>COSTAMED e GIOCO VIAGGI</h4>
       <p>Solo questi due fornitori (COSTAMED LEX escluso). Con <b>Cabina</b> e <b>Telefono</b>. Righe <b>OLD / DELETE / CANCELED</b> eliminate.</p>
       <div class="ships">
-        <span>COSTAMED</span><span>GIOCO VIAGGI</span><span>✕ OLD · DELETE · CANCELED</span>
+        <span>COSTAMED</span><span>GIOCO VIAGGI</span><span>OLD · DELETE · CANCELED esclusi</span>
       </div>
     </div>
   </div>
@@ -3894,7 +3894,7 @@ const GEN = (() => {
         t.font = { bold: true, size: 13, color: { argb: BLUE } }; ws.getRow(1).height = 20;
         ws.mergeCells(2, 1, 2, NC);
         const sub = ws.getCell('A2');
-        sub.value = `Inizio turno ${r.turnoStart || '-'} · convocazione ${r.convocazione || '-'} · PAX ${r.pax}${r.wheelchair ? ' · ♿ SEDIA A ROTELLE' : ''}`;
+        sub.value = `Inizio turno ${r.turnoStart || '-'} · convocazione ${r.convocazione || '-'} · PAX ${r.pax}${r.wheelchair ? ' · SEDIA A ROTELLE' : ''}`;
         sub.font = { size: 11, bold: r.wheelchair, color: { argb: r.wheelchair ? YELB : INK } };
         // En-tête colonnes (ligne 3)
         ws.getRow(3).height = 22;
@@ -4009,14 +4009,14 @@ const GEN = (() => {
   }
   function genRowHtml(r) {
     return `<tr data-key="${escapeHtml(r.key || '')}" style="cursor:pointer;border-bottom:1px solid var(--line-soft);${r.assistenza ? 'background:var(--yellow-tint)' : ''}">
-      <td style="padding:5px 6px;width:16px;text-align:center;color:var(--ink-mute)">${r.manual ? '✎' : ''}</td>
+      <td style="padding:5px 6px;width:16px;text-align:center" title="${r.manual ? 'riga modificata a mano' : ''}">${r.manual ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#B07400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' : ''}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.data)}</td>
       <td style="padding:5px 8px;font-size:11px;color:var(--ink-mute)">${escapeHtml(r.modo || '')}</td>
       <td style="padding:5px 8px;font-size:12px;white-space:nowrap">${r.sens === 'P'
         ? '<span style="display:inline-block;min-width:17px;text-align:center;font-weight:800;color:#B07400;background:#FCF2D6;border-radius:5px;padding:1px 4px">P</span> partenza'
         : '<span style="display:inline-block;min-width:17px;text-align:center;font-weight:800;color:#15386A;background:#E7EFFA;border-radius:5px;padding:1px 4px">A</span> arrivo'}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(r.nave)}</td>
-      <td style="padding:5px 8px;font-size:12px"><b>${escapeHtml(r.scalo)}</b>${r.tpt ? ' <span style="font-size:10px;color:var(--ink-mute)">TPT</span>' : ''}${r.terminal === 'T2' ? ' <span style="font-size:10px;color:var(--yellow-deep)">T2</span>' : ''}${r.wheelchair ? ' <span title="sedia a rotelle">♿</span>' : ''}</td>
+      <td style="padding:5px 8px;font-size:12px"><b>${escapeHtml(r.scalo)}</b>${r.tpt ? ' <span style="font-size:10px;color:var(--ink-mute)">TPT</span>' : ''}${r.terminal === 'T2' ? ' <span style="font-size:10px;color:var(--yellow-deep)">T2</span>' : ''}${r.wheelchair ? ' <span title="sedia a rotelle" style="font-size:9px;font-weight:700;color:var(--yellow-deep);background:var(--yellow-tint);border:1px solid #F0DCA8;border-radius:4px;padding:0 4px">WCH</span>' : ''}</td>
       <td style="padding:5px 8px;font-size:12px">${escapeHtml(cleanVolo(r.volo))}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${escapeHtml(r.std)}</td>
       <td style="padding:5px 8px;font-size:12px;text-align:right">${r.pax}</td>
