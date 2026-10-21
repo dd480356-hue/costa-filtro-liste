@@ -3650,6 +3650,8 @@ const GEN = (() => {
       if (cl.length) clusters.push(cl);
       for (const cluster of clusters) { if (flightCfg) computeFlights(cluster, flightCfg); else computeNavi(cluster, sens); }
     }
+    // FINE TURNO ADDETTO non si conosce ancora → mai mostrata/esportata.
+    for (const r of recs) { r.fineTurno = ''; r.turnoEnd = ''; }
   }
   async function recomputeAll() { ALL = await dbAll(); computeEngine(ALL); }
 
@@ -3836,7 +3838,7 @@ const GEN = (() => {
         t.font = { bold: true, size: 13, color: { argb: BLUE } }; ws.getRow(1).height = 20;
         ws.mergeCells(2, 1, 2, NC);
         const sub = ws.getCell('A2');
-        sub.value = `Turno ${r.turnoStart}–${r.turnoEnd} · convocazione ${r.convocazione || '-'} · PAX ${r.pax}${r.wheelchair ? ' · ♿ SEDIA A ROTELLE' : ''}`;
+        sub.value = `Inizio turno ${r.turnoStart || '-'} · convocazione ${r.convocazione || '-'} · PAX ${r.pax}${r.wheelchair ? ' · ♿ SEDIA A ROTELLE' : ''}`;
         sub.font = { size: 11, bold: r.wheelchair, color: { argb: r.wheelchair ? YELB : INK } };
         // En-tête colonnes (ligne 3)
         ws.getRow(3).height = 22;
