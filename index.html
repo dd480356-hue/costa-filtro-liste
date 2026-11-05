@@ -1091,6 +1091,22 @@ input:focus,select:focus,textarea:focus{border-color:var(--d-navy2);box-shadow:0
   .dropzone{padding:40px 18px}
   .genbar input{min-width:0;width:100%}
 }
+
+/* ── Polish v4 : micro-interazioni coerenti (additivo, nessuna logica) ── */
+@media (prefers-reduced-motion: no-preference){
+  .browse,.btn,.btn-primary,.clear-all-btn,.chip,.chip-action,.facet-chip,.active-chip,.segmented button,.card-remove,.pl-pill,.pl-ic{
+    transition: transform .12s ease, box-shadow .2s ease, background-color .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .browse:hover,.btn-primary:hover{ transform: translateY(-1px); box-shadow: 0 12px 24px -12px rgba(30,79,140,.55); }
+  .browse:active,.btn:active,.btn-primary:active,.clear-all-btn:active,.chip:active,.chip-action:active,.facet-chip:active,.segmented button:active,.card-remove:active{ transform: translateY(1px); }
+  .stat{ transition: box-shadow .2s ease; }
+  .filter-section:not(.compact){ transition: box-shadow .2s ease, border-color .2s ease; }
+}
+.stat:hover{ box-shadow: var(--d-shsm); }
+.filter-section:not(.compact):hover{ box-shadow: var(--d-sh); }
+button:disabled,.browse:disabled,.btn:disabled,.btn-primary:disabled{ opacity:.5; cursor:not-allowed; box-shadow:none; transform:none; }
+.stat .v,.airport-card .counts b{ font-variant-numeric: tabular-nums; }
+[data-act]{ cursor: pointer; }
 </style>
 </head>
 <body>
@@ -1181,6 +1197,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--d-navy2);box-shadow:0
 
   <div class="clear-all-row" style="gap:8px;flex-wrap:wrap">
     <button class="browse" id="gen-mail" style="margin:0">Importa da email (Microsoft)</button>
+    <button class="browse" id="gen-onedrive" style="margin:0">Importa da OneDrive (mese)</button>
     <button class="browse" id="gen-import" style="margin:0">Importa file generale (seed)</button>
     <button class="browse" id="gen-export" style="margin:0">Esporta file generale .xlsx</button>
     <button class="browse" id="gen-export-scali" style="margin:0">Esporta liste per scalo</button>
@@ -1429,17 +1446,20 @@ const TRANSFER_GV_AIRPORTS = new Set(['MXP', 'MX1', 'LIN']);
 const TRANSFER_CM_AIRPORTS = new Set(['FCO']);
 const GV_KEY = supplierKey('GIOCO VIAGGI');   // 'GIOCOVIAGGI'
 const CM_KEY = supplierKey('COSTAMED');        // 'COSTAMED'
+// Fornitore (chiave normalizzata) → aeroporti dove è tenuto ([] = tutti). Pilotato dai parametri.
+let SUPPLIER_AIRPORTS = { [GV_KEY]: ['MXP', 'MX1', 'LIN'], [CM_KEY]: ['FCO'] };
 function transferAirports(row) {
   // Aéroport du transfert = point du bus (Frm/To) OU aéroport du vol (Ori/Dst).
   return [row['Ori'], row['Dst'], row['Frm'], row['To']]
     .map(v => String(v || '').trim().toUpperCase());
 }
 function transferKeep(row) {
-  const apts = transferAirports(row);
   const sup = supplierKey(row['Supplier']);
-  if (sup === GV_KEY && apts.some(a => TRANSFER_GV_AIRPORTS.has(a))) return true;
-  if (sup === CM_KEY && apts.some(a => TRANSFER_CM_AIRPORTS.has(a))) return true;
-  return false;
+  const allow = SUPPLIER_AIRPORTS[sup];
+  if (!allow) return false;             // fornitore non configurato → escluso
+  if (!allow.length) return true;       // nessun aeroporto elencato = tenuto ovunque
+  const apts = transferAirports(row);
+  return apts.some(a => allow.includes(a));
 }
 // Statuts exclus (configurable) : token = match esatto O prefisso. Default OLD / DEL* / CANC* / CXL / CNL.
 let EXCLUDED_STATUSES = ['OLD', 'DEL', 'CANC', 'CXL', 'CNL'];
@@ -1455,10 +1475,18 @@ function applyFilterCfg(cfg) {
     ITALIAN_AIRPORTS.clear();
     for (const a of cfg.italianAirports) { const v = String(a).trim().toUpperCase(); if (v) ITALIAN_AIRPORTS.add(v); }
   }
-  if (Array.isArray(cfg.transferSuppliers) && cfg.transferSuppliers.length) {
+  if (cfg.transferSupplierAirports && typeof cfg.transferSupplierAirports === 'object') {
+    SUPPLIER_AIRPORTS = {}; TRANSFER_SUPPLIERS = []; SUPPLIER_KEYS.clear();
+    for (const [name, apts] of Object.entries(cfg.transferSupplierAirports)) {
+      const nm = String(name).trim(); if (!nm) continue;
+      const k = supplierKey(nm);
+      SUPPLIER_AIRPORTS[k] = (Array.isArray(apts) ? apts : []).map(a => String(a).trim().toUpperCase()).filter(Boolean);
+      TRANSFER_SUPPLIERS.push(nm); SUPPLIER_KEYS.add(k);
+    }
+  } else if (Array.isArray(cfg.transferSuppliers) && cfg.transferSuppliers.length) {
     TRANSFER_SUPPLIERS = cfg.transferSuppliers.map(s => String(s).trim()).filter(Boolean);
-    SUPPLIER_KEYS.clear();
-    for (const s of TRANSFER_SUPPLIERS) SUPPLIER_KEYS.add(supplierKey(s));
+    SUPPLIER_KEYS.clear(); SUPPLIER_AIRPORTS = {};
+    for (const s of TRANSFER_SUPPLIERS) { const k = supplierKey(s); SUPPLIER_KEYS.add(k); SUPPLIER_AIRPORTS[k] = []; }
   }
   if (Array.isArray(cfg.excludedStatuses) && cfg.excludedStatuses.length) {
     EXCLUDED_STATUSES = cfg.excludedStatuses.map(s => String(s).trim().toUpperCase()).filter(Boolean);
@@ -2564,6 +2592,7 @@ async function processFile(file, tab) {
       tab,
       id: Math.random().toString(36).slice(2),
       meta, allRows, inputCount, statusRemoved, otherSuppliers,
+      rawRows: rows,   // lignes brutes conservées → re-filtrage rétroactif au changement de paramètres
       outName: file.name.replace(/\.xlsx?$/i, '') + '_FILTRO.xlsx',
       filterState: makeFilterState(allRows, isTransfer ? 'transfer' : 'flight'),
     };
@@ -2576,6 +2605,27 @@ function renderResults() {
   renderResultsForTab('flt');
   renderResultsForTab('trf');
 }
+
+// Re-filtre une session depuis ses lignes brutes avec la config courante (rétroactif).
+function refilterSession(s) {
+  if (!s || !s.rawRows || !s.meta || !s.meta.isRelevant) return;
+  const rows = s.rawRows;
+  let allRows = [];
+  if (s.meta.typeCode === 'LISTA') allRows = filterListaByFlight(rows, s.meta.listaInfo);
+  else if (s.meta.typeCode === 'FLT_PRE') allRows = filterFlightListPre(rows);
+  else allRows = groupByFlight(filterTransferList(rows), true).flatMap(g => g.rows);
+  s.allRows = allRows; s._emptyLegCols = null;
+  const isTransfer = (s.meta.typeCode === 'TRF_PRE' || s.meta.typeCode === 'TRF_POST');
+  if (isTransfer) {
+    const paxRows = rows.filter(isPassengerRow);
+    s.statusRemoved = paxRows.filter(r => transferKeep(r) && isExcludedStatus(r)).length;
+    s.otherSuppliers = paxRows.filter(r => !transferKeep(r)).length;
+  }
+  const prev = s.filterState;
+  s.filterState = makeFilterState(allRows, isTransfer ? 'transfer' : 'flight');
+  if (prev) { s.filterState.search = prev.search; s.filterState.columns = prev.columns; s.filterState.ageFilter = prev.ageFilter; s.filterState.facets = prev.facets || {}; }
+}
+function refilterAllSessions() { for (const s of STATE) refilterSession(s); renderResults(); }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RENDU MODE TRANSFER — filtres génériques sur les 37 colonnes
@@ -2613,8 +2663,8 @@ function renderTransferBody(s) {
       </div>
 
       <div class="filter-section compact">
-        <div class="fs-label">Fornitore <span class="pill">${TRANSFER_SUPPLIER}</span></div>
-        <div style="font-size:12px;color:var(--ink-soft)">Solo righe <b>COSTAMED</b> e <b>GIOCO VIAGGI</b> · ${s.otherSuppliers || 0} righe di altri fornitori escluse (COSTAMED LEX, Trumpy…).</div>
+        <div class="fs-label">Fornitore <span class="pill">${escapeHtml(TRANSFER_SUPPLIERS.join(' + ') || '—')}</span></div>
+        <div style="font-size:12px;color:var(--ink-soft)">Solo righe <b>${TRANSFER_SUPPLIERS.map(escapeHtml).join('</b>, <b>') || '—'}</b> · ${s.otherSuppliers || 0} righe di altri fornitori escluse. Gestisci i fornitori nei parametri (regole avanzate · Filtri).</div>
       </div>
       <div class="filter-section compact">
         <div class="fs-label">Stato <span class="pill">${s.statusRemoved || 0} tolte</span></div>
@@ -3382,6 +3432,8 @@ const GEN = (() => {
     filters: {
       italianAirports: ['FCO','CIA','MXP','LIN','BGY','VCE','TSF','VRN','TRS','BLQ','PMF','FLR','PSA','TRN','CUF','GOA','AOI','PSR','NAP','QSR','BRI','BDS','FOG','SUF','REG','VST','CTA','PMO','TPS','CIY','CAG','OLB','AHO','PEG'],
       transferSuppliers: ['COSTAMED','GIOCO VIAGGI'],
+      // Fornitore transfer → aeroporti dove è tenuto (vuoto = tutti). Aggiungendo una riga qui il fornitore è gestito automaticamente.
+      transferSupplierAirports: { 'GIOCO VIAGGI': ['MXP','MX1','LIN'], 'COSTAMED': ['FCO'] },
       excludedStatuses: ['OLD','DEL','CANC','CXL','CNL']
     },
     navi: {
@@ -3389,6 +3441,10 @@ const GEN = (() => {
       gapImbarco:60, gapSbarco:60, splitGapMin:120,
       tptImbarcoAlways:true, tptSbarcoOnlyIfSharedFlight:true,
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
+      t2Carriers:['U2'],   // vettori i cui voli arrivano/partono sempre dal Terminal 2 MXP (es. easyJet U2)
+      fineTurnoAfterMin:0,   // FINE TURNO = STD più tardi del turno + questi minuti
+      portByScalo:{ FCO:'CIVITAVECCHIA' },   // porto per scalo (prioritario; es. Roma = Civitavecchia)
+      portByNave:{ SMERALDA:'SVN', FASCINOSA:'SVN', PACIFICA:'SVN', DIADEMA:'SVN', FAVOLOSA:'SVN', TOSCANA:'GOA', FORTUNA:'SVN' },   // porto del nord per nave (SVN Savona / GOA Genova)
       // valori usati quando uno scalo non ne definisce uno proprio
       default: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
                  tptImbConv:'', tptImbPart:'', tptSbarco:'', sbarcoTimes:[] },
@@ -3406,9 +3462,10 @@ const GEN = (() => {
       }
     },
     charter: {
-      threshold:20, gapMin:60, italianOnly:true, transitReportAtTakeoff:true, checkinCloseBeforeMin:10,
+      threshold:20, gapMin:60, italianOnly:true, transitReportAtTakeoff:true, checkinCloseBeforeMin:10, transitAssistMin:75,
       // ore prima dello STD per categoria ; inizio turno = convocazione − pre (min)
       convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
+      convByCarrier:{ QR:{h:3,pre:30} },   // override per vettore (prioritario sul tipo aereo): es. QR conv −3h, inizio −3h30
       // Capienza max per tipo aereo : il tipo si deduce dai PAX del volo (il più piccolo la cui capienza ≥ pax)
       maxPaxByType:{ '737':186, '787':352 },
       itaScali:['LIN','MXP','FCO','BGY'],
@@ -3417,8 +3474,9 @@ const GEN = (() => {
     // Voli NORMALI (di linea) : set separato dal charter, tutto configurabile.
     // Inerte finché non si assegna una nave al metier NORMALE.
     normale: {
-      threshold:20, gapMin:60, transitReportAtTakeoff:true, checkinCloseBeforeMin:10,
+      threshold:20, gapMin:60, transitReportAtTakeoff:true, checkinCloseBeforeMin:10, transitAssistMin:75,
       convByType:{ '787':{h:4,pre:30}, '737':{h:3,pre:30}, ITA:{h:3,pre:30}, CX:{h:4,pre:30}, ALTRI:{h:2.5,pre:30} },
+      convByCarrier:{ QR:{h:3,pre:30} },   // override per vettore (prioritario sul tipo aereo): es. QR conv −3h, inizio −3h30
       maxPaxByType:{ '737':186, '787':352 },
       itaScali:['LIN','MXP','FCO','BGY'],
       aircraftByFlight:{}
@@ -3472,9 +3530,8 @@ const GEN = (() => {
       cache: { cacheLocation: 'localStorage' } });
     return msalApp;
   }
-  async function msalToken() {
+  async function msalToken(scopes = ['Mail.Read']) {
     const app = msalInit(); if (app.initialize) await app.initialize();
-    const scopes = ['Mail.Read'];
     let acc = app.getAllAccounts()[0];
     if (!acc) { const r = await app.loginPopup({ scopes }); acc = r.account; }
     try { const r = await app.acquireTokenSilent({ scopes, account: acc }); return r.accessToken; }
@@ -3507,6 +3564,53 @@ const GEN = (() => {
     if (!files.length) { flash('Nessun allegato (zip/xlsx) trovato nella posta recente.'); return; }
     await handleFiles(files, 'flt');
     flash(files.length + ' allegati importati dalla posta.');
+  }
+  // ---- Import da OneDrive (cartella /Costa/Liste/<mese> riempita da Power Automate) ----
+  function pickOneDriveMonth(months) {
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(13,34,56,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px';
+      const opts = months.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+      ov.innerHTML = `<div style="background:var(--bg);border-radius:14px;max-width:420px;width:100%;padding:22px">
+        <h2 style="font-size:18px;color:var(--blue-darker);margin-bottom:10px">Importa da OneDrive — scegli il mese</h2>
+        <select id="odm" style="width:100%;font-family:inherit;font-size:14px;padding:8px;border:1px solid var(--line);border-radius:8px">${opts}</select>
+        <div style="text-align:right;margin-top:16px"><button class="clear-all-btn" id="odm-cancel" style="margin-right:6px">Annulla</button><button class="browse" id="odm-ok" style="margin:0">Importa</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      const done = v => { document.body.removeChild(ov); resolve(v); };
+      ov.querySelector('#odm-cancel').addEventListener('click', () => done(null));
+      ov.addEventListener('click', e => { if (e.target === ov) done(null); });
+      ov.querySelector('#odm-ok').addEventListener('click', () => done(ov.querySelector('#odm').value));
+    });
+  }
+  async function importFromOneDrive() {
+    if (!MS_CFG.clientId) { alert('Configura MS_CFG.clientId (registrazione app Entra, scope Files.Read).'); return; }
+    if (typeof msal === 'undefined') { alert('Libreria MSAL non caricata (connessione?).'); return; }
+    let token; try { token = await msalToken(['Files.Read']); } catch (e) { alert('Login Microsoft fallito: ' + (e.message || e)); return; }
+    const H = { Authorization: 'Bearer ' + token };
+    const base = 'https://graph.microsoft.com/v1.0/me/drive/root:/Costa/Liste';
+    let res = await fetch(base + ':/children?$select=name,folder&$top=200', { headers: H });
+    if (res.status === 404) { alert('Cartella /Costa/Liste non trovata in OneDrive.'); return; }
+    if (!res.ok) { alert('Graph errore ' + res.status + ': ' + (await res.text()).slice(0, 200)); return; }
+    const months = ((await res.json()).value || []).filter(x => x.folder).map(x => x.name).sort().reverse();
+    if (!months.length) { alert('Nessun mese in /Costa/Liste.'); return; }
+    const month = await pickOneDriveMonth(months);
+    if (!month) return;
+    res = await fetch(base + '/' + encodeURIComponent(month) + ':/children?$select=name,file,@microsoft.graph.downloadUrl&$top=400', { headers: H });
+    if (!res.ok) { alert('Graph errore ' + res.status + ': ' + (await res.text()).slice(0, 200)); return; }
+    const items = ((await res.json()).value || []).filter(x => x.file && /\.(xlsx?|xlsm|xml|zip)$/i.test(x.name || ''));
+    if (!items.length) { alert('Nessun file (zip/xlsx) in ' + month + '.'); return; }
+    const files = [];
+    for (const it of items) {
+      const du = it['@microsoft.graph.downloadUrl'];
+      if (!du) continue;
+      const fr = await fetch(du);   // URL preautenticato: niente header
+      if (!fr.ok) continue;
+      files.push(new File([await fr.arrayBuffer()], it.name, { type: 'application/octet-stream' }));
+    }
+    if (!files.length) { alert('Download dei file fallito.'); return; }
+    await handleFiles(files, 'flt');
+    flash(files.length + ' file importati da OneDrive (' + month + ').');
   }
   let sb = null, CLOUD = false, cloudUser = null;
   const cloudConfigured = () => !!(CLOUD_CFG.url && CLOUD_CFG.anonKey) && location.protocol.startsWith('http');
@@ -3548,6 +3652,27 @@ const GEN = (() => {
           Volo: r['VoloIT'], Ora: timeStr(r['Decollo']), Rotta: (r['AptDep'] || '') + '→' + (r['AptArr'] || ''), Richiesta: r['Note'] || '' };
   }
 
+  // Transito a uno scalo: il pax ATTERRA allo scalo e poi ne RIPARTE (tappa intermedia).
+  // Si guardano origini, destinazioni, date e orari di TUTTI i voli del pax (_legs,
+  // già in ordine cronologico 1→6). Niente atterraggio prima della ripartenza = non transito.
+  // Senza _legs (fallback): vecchia euristica Origine 6 + Origine 5 italiane.
+  function isTransitAt(legs, scalo, r) {
+    const a = String(scalo == null ? '' : scalo).trim().toUpperCase().replace(/^MX1$/, 'MXP');
+    const norm = v => String(v == null ? '' : v).trim().toUpperCase().replace(/^MX1$/, 'MXP');
+    if (Array.isArray(legs) && legs.length) {
+      // Ordine cronologico reale: data + orario, non l'ordine delle colonne.
+      const ord = legs.slice().sort((x, y) =>
+        ((x.date || '') + ' ' + (x.etd || x.eta || '')).localeCompare((y.date || '') + ' ' + (y.etd || y.eta || '')));
+      let firstArr = -1, lastDep = -1;
+      for (let i = 0; i < ord.length; i++) {
+        if (firstArr < 0 && norm(ord[i].dst) === a) firstArr = i;   // 1ª volta che ATTERRA allo scalo
+        if (norm(ord[i].ori) === a) lastDep = i;                     // ultima volta che RIPARTE dallo scalo
+      }
+      return firstArr >= 0 && lastDep > firstArr;   // atterra poi riparte = transito
+    }
+    return !!(r['Ori6IT'] && r['Ori5IT']);
+  }
+
   // ---- Dérivation depuis les listes déposées ----
   function recFromItems(items) {
     const map = new Map();
@@ -3578,8 +3703,8 @@ const GEN = (() => {
           volo = String(r['VoloIT'] || '').trim();
           datev = toIsoDate(r['DataVolo']);
           std = timeStr(r['Decollo']); eta = timeStr(r['Arrivo']);
-          // Transito: Origine 6 italiana E Origine 5 italiana.
-          isTransit = !!(r['Ori6IT'] && r['Ori5IT']);
+          // Transito: lo scalo è una tappa intermedia (atterra e riparte), letta dai voli del pax.
+          isTransit = isTransitAt(r._legs, scalo, r);
         }
         if (String(scalo).toUpperCase() === 'MX1') scalo = 'MXP';  // MX1 = MXP (stesso aeroporto)
         volo = String(volo).trim();
@@ -3590,17 +3715,26 @@ const GEN = (() => {
           volo = (a || b) ? ((a || '?') + '→' + (b || '?')) : 'N/D';
         }
         const carrier = (String(volo).match(/^[A-Z]{2}/) || [''])[0];
+        // Vettori sempre al Terminal 2 MXP (es. U2 easyJet) → forza T2
+        if (!terminal && carrier && (RULES.navi.t2Carriers || []).includes(carrier)) terminal = 'T2';
         if (!scalo || !datev) continue;
         const key = [datev, ship.toUpperCase(), scalo.toUpperCase(), String(volo).toUpperCase(), sens].join('|');
         let rec = map.get(key);
         if (!rec) { rec = { key, data: datev, sens, nave: ship, modo: modo || '', scalo, volo, std, eta, carrier,
           foreign: (RULES.navi.foreignShips || []).map(x => String(x).trim().toUpperCase()).includes(String(ship).toUpperCase()),
-          tpt, terminal, wheelchair: false, wheelchairPax: 0, destinazione: '', pax: 0, transitoPax: 0, transito: false, passeggeri: [] }; map.set(key, rec); }
-        rec.pax++;
-        if (isTransit) rec.transitoPax++;
-        if (wc) { rec.wheelchair = true; rec.wheelchairPax++; }
+          tpt, terminal, wheelchair: false, wheelchairPax: 0, destinazione: '', prt: '', pax: 0, transitoPax: 0, transito: false, passeggeri: [], _seen: new Set() }; map.set(key, rec); }
+        // Porto (colonna PRT della lista = porto di partenza/arrivo). Primo valore non vuoto.
+        if (!rec.prt) { for (const k in r) { if (/^(prt|porto|port)$/i.test(String(k).trim())) { const v = String(r[k] == null ? '' : r[k]).trim(); if (v) { rec.prt = v.toUpperCase(); break; } } } }
+        // Dedup passeggero: stessa persona (Cognome|Nome|Booking) contata 1 sola volta anche se la lista la ripete.
+        const pid = [r['Lastname'], r['Firstname'], r['BkgNo']].map(v => String(v == null ? '' : v).trim().toUpperCase()).join('|');
+        if (pid === '||' || !rec._seen.has(pid)) {
+          if (pid !== '||') rec._seen.add(pid);
+          rec.pax++;
+          if (isTransit) rec.transitoPax++;
+          if (wc) { rec.wheelchair = true; rec.wheelchairPax++; }
+          rec.passeggeri.push(paxDetail(r, isTransfer));
+        }
         if (terminal === 'T2') rec.terminal = 'T2';
-        rec.passeggeri.push(paxDetail(r, isTransfer));
         if (!rec.std && std) rec.std = std;
         if (!rec.eta && eta) rec.eta = eta;
       }
@@ -3610,6 +3744,7 @@ const GEN = (() => {
       rec.transito = rec.pax > 0 && rec.transitoPax >= Math.ceil(rec.pax * 0.8);
       // Metier dei voli (liste Flight) deciso dal numero di pax sullo stesso volo, non dalla nave.
       if (rec.modo && rec.modo !== 'NAVI') rec.modo = rec.pax > thr ? 'CHARTER' : 'NORMALE';
+      delete rec._seen;   // transiente: non serializzare
     }
     return [...map.values()];
   }
@@ -3622,10 +3757,66 @@ const GEN = (() => {
     for (const e of tbl) { if (e.untilMin == null) return e.t; if (stdMin != null && stdMin <= e.untilMin) return e.t; }
     return tbl[tbl.length - 1].t;
   }
+  // ───────── Tipo aereo in tempo reale (AeroDataBox / RapidAPI) ─────────
+  let ADB_KEY = '';
+  try { ADB_KEY = localStorage.getItem('adb_apikey') || ''; } catch (e) {}
+  let ACFT_TYPE = {};   // 'VOLO|YYYY-MM-DD' → '737' | '787' | null (null = cercato, nessun dato)
+  try { ACFT_TYPE = JSON.parse(localStorage.getItem('acft_cache') || '{}') || {}; } catch (e) { ACFT_TYPE = {}; }
+  function _acftSave() { try { localStorage.setItem('acft_cache', JSON.stringify(Object.fromEntries(Object.entries(ACFT_TYPE).filter(([, v]) => v)))); } catch (e) {} }
+  function _acftKey(rec) { return String(rec.volo || '').replace(/\s+/g, '').toUpperCase() + '|' + (rec.data || ''); }
+  // Classifica QUALSIASI modello: wide-body → categoria '787' (−4h), narrow-body → '737' (−3h).
+  function _modelToType(model) {
+    const m = String(model || '').toUpperCase();
+    if (!m) return null;
+    // wide-body / lungo raggio → −4h
+    if (/\b(7[4678]7|78[0-9]|DREAMLINER|A3(00|10|30|40|50|80)|MD-?11|L10|DC-?10|IL-?96|B7[4678])/.test(m)) return '787';
+    // narrow-body / corto-medio raggio → −3h
+    if (/\b(737|7[0-9]?M[89]|MAX|75[0-9]|72[0-9]|A3(1[89]|20|21|22)|A22|A220|BCS|CS[13]|E1[789]|E19|E-?JET|EMB|ERJ|CRJ|AT[47]|ATR|DH[C]?|Q[234]00|B73)/.test(m)) return '737';
+    return null;   // davvero non identificabile → deduzione PAX
+  }
+  let _acftBusy = false;
+  async function resolveAircraftTypes() {
+    if (!ADB_KEY || _acftBusy || typeof fetch === 'undefined' || typeof ALL === 'undefined') return;
+    const want = new Map();
+    for (const r of ALL) {
+      if (r.manual) continue;
+      const modo = r.modo || modeOf(r.nave);
+      if (modo !== 'CHARTER' && modo !== 'NORMALE') continue;
+      const vn = String(r.volo || '').replace(/\s+/g, '').toUpperCase();
+      if (!vn || vn === 'N/D' || !r.data) continue;
+      if ((RULES.charter.aircraftByFlight || {})[r.volo] || (RULES.normale.aircraftByFlight || {})[r.volo]) continue;
+      const k = _acftKey(r);
+      if (k in ACFT_TYPE) continue;
+      want.set(k, { number: vn, date: r.data });
+    }
+    const list = [...want.entries()].slice(0, 40);   // throttle per passata
+    if (!list.length) return;
+    _acftBusy = true;
+    let changed = false;
+    for (const [k, q] of list) {
+      try {
+        const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(q.number)}/${encodeURIComponent(q.date)}?dateLocalRole=Both&withAircraftImage=false&withLocation=false`;
+        const res = await fetch(url, { headers: { 'X-RapidAPI-Key': ADB_KEY, 'X-RapidAPI-Host': 'aerodatabox.p.rapidapi.com' } });
+        if (res.status === 429) break;                 // quota esaurito → fermati, riprova dopo
+        if (!res.ok) { ACFT_TYPE[k] = null; continue; }
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : ((data && data.departures) || (data && data.arrivals) || []);
+        let type = null;
+        for (const f of arr) { type = _modelToType(f && f.aircraft && (f.aircraft.model || f.aircraft.typeName)); if (type) break; }
+        ACFT_TYPE[k] = type;                            // type o null (evita ri-fetch nella sessione)
+        if (type) changed = true;
+      } catch (e) { /* rete assente → non marco, si riprova */ }
+      await new Promise(r => setTimeout(r, 250));        // ménage le quota
+    }
+    _acftBusy = false;
+    if (changed) { _acftSave(); computeEngine(ALL); render(); }
+  }
+
   function flightCat(rec, cfg) {
     const byF = cfg.aircraftByFlight || {};
     if (byF[rec.volo]) return byF[rec.volo];
-    if (rec.carrier === 'CX') return 'CX';
+    const at = ACFT_TYPE[_acftKey(rec)]; if (at) return at;   // tipo reale (AeroDataBox) prima della deduzione PAX
+    if (rec.carrier === 'CX') return '787';   // tutti i voli CX (Cathay) sono 787
     // Deduzione dal numero PAX del volo : il tipo più piccolo la cui capienza ≥ pax.
     const caps = Object.entries(cfg.maxPaxByType || {}).map(([t, n]) => [t, +n]).filter(([, n]) => n > 0).sort((a, b) => a[1] - b[1]);
     if (caps.length && rec.pax != null) {
@@ -3646,11 +3837,15 @@ const GEN = (() => {
     for (const x of cl) {
       if (transit && cfg.transitReportAtTakeoff) {
         const cm = toMin(x.std);
+        const am = +cfg.transitAssistMin || 75;   // assistenza transito prima dello STD (default 1h15)
+        x.inizioTurno = cm != null ? hhmm(cm - am) : '';
         x.convocazione = cm != null ? hhmm(cm - cfg.checkinCloseBeforeMin) : '';
-        x.inizioTurno = x.convocazione;
-        x.note = 'TRANSITO: chiusura check-in → report al decollo';
+        x.fineTurno = x.std || '';
+        x.note = 'TRANSITO: assistenza ' + Math.floor(am / 60) + 'h' + String(am % 60).padStart(2, '0') + ' → report al decollo';
       } else {
-        const cat = flightCat(x, cfg); const rule = cfg.convByType[cat] || cfg.convByType.ALTRI;
+        const cbyC = (cfg.convByCarrier || {})[x.carrier];
+        const cat = cbyC ? x.carrier : flightCat(x, cfg);
+        const rule = cbyC || cfg.convByType[cat] || cfg.convByType.ALTRI;
         const cm = toMin(x.std); const conv = cm != null ? cm - Math.round(rule.h * 60) : null;
         x.convocazione = conv != null ? hhmm(conv) : '';
         x.inizioTurno = conv != null ? hhmm(conv - rule.pre) : '';
@@ -3695,12 +3890,18 @@ const GEN = (() => {
         if (x.wheelchair) x.note = 'SEDIA A ROTELLE';
       }
     }
-    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; });
+    // FINE TURNO = STD più tardi del turno + offset (sulla riga chef)
+    const _fo = +RULES.navi.fineTurnoAfterMin || 0;
+    const _stds = cl.map(x => toMin(x.std)).filter(v => v != null);
+    const _fine = _stds.length ? hhmm(Math.max(..._stds) + _fo) : '';
+    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; x.fineTurno = (i === 0) ? _fine : ''; });
   }
   function computeEngine(recs) {
     const auto = recs.filter(r => !r.manual);  // le righe modificate a mano non vengono ricalcolate
     for (const r of auto) { r.assistenza = false; r.turnoPax = r.pax; r.turnoLead = true;
-      r.turnoStart = r.std || ''; r.turnoEnd = r.std || ''; r.inizioTurno = ''; r.convocazione = ''; r.fineTurno = ''; r.sbarco = ''; r.note = ''; }
+      r.turnoStart = r.std || ''; r.turnoEnd = r.std || ''; r.inizioTurno = ''; r.convocazione = ''; r.fineTurno = ''; r.sbarco = ''; r.note = '';
+      const _port = r.prt || (RULES.navi.portByScalo || {})[String(r.scalo).toUpperCase()] || (RULES.navi.portByNave || {})[String(r.nave).toUpperCase()] || '';
+      r.destinazione = _port ? ((r.sens === 'P' ? 'SBARCO ' : '') + _port) : (r.sens === 'P' ? 'SBARCO' : ''); }
     const groups = new Map();
     for (const r of auto) { const g = r.data + '|' + String(r.scalo).toUpperCase() + '|' + r.sens + '|' + (r.modo || '');
       if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
@@ -3719,7 +3920,13 @@ const GEN = (() => {
     // FINE TURNO ADDETTO: non si conosce ancora → sempre vuota (compilata a mano).
     for (const r of auto) { r.fineTurno = ''; r.turnoEnd = ''; }
   }
-  async function recomputeAll() { ALL = await dbAll(); computeEngine(ALL); }
+  async function recomputeAll() {
+    const all = await dbAll();
+    const byKey = new Map();   // collapse anti-doppione: una sola riga per chiave (date|nave|scalo|volo|sens)
+    for (const r of all) { const k = r.key || genKeyOf(r); if (!byKey.has(k)) byKey.set(k, r); }
+    ALL = [...byKey.values()];
+    computeEngine(ALL); resolveAircraftTypes();
+  }
 
   // ---- Ingestion (merge + 48h + doublons) ----
   async function ingest(items) {
@@ -3851,6 +4058,8 @@ const GEN = (() => {
       ws.getCell(row, 12).value = r.pax;
       if (r.assistenza && r.turnoLead) {
         ws.getCell(row, 13).value = '1 ASSISTENTE';
+        // Volo misto, 1 solo addetto: STAFF 2 = numero pax in transito + dicitura
+        if (r.transitoPax > 0) ws.getCell(row, 14).value = r.transitoPax + ' TRANSITO';
         if (r.note) ws.getCell(row, 22).value = r.note;
       }
       const rowFill = r.assistenza ? YEL : (zeb ? ZEBRA : null);
@@ -3863,15 +4072,51 @@ const GEN = (() => {
       row++;
     }
   }
+  // Modal: scelta degli scali italiani da includere nel generale. Ricorda l'ultima scelta.
+  function pickScaliExport(scali) {
+    return new Promise(resolve => {
+      let saved; try { saved = JSON.parse(localStorage.getItem('gen_scali_sel') || 'null'); } catch (e) { saved = null; }
+      const pre = new Set(Array.isArray(saved) ? saved : scali);   // default: tutti
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(13,34,56,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px';
+      const boxes = scali.map(s => `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:5px 9px;border:1px solid var(--line);border-radius:8px;margin:3px;cursor:pointer"><input type="checkbox" class="gsx" value="${escapeHtml(s)}" ${pre.has(s) ? 'checked' : ''}> ${escapeHtml(s)}</label>`).join('');
+      ov.innerHTML = `<div style="background:var(--bg);border-radius:14px;max-width:620px;width:100%;max-height:85vh;overflow:auto;padding:22px">
+        <h2 style="font-size:18px;color:var(--blue-darker);margin-bottom:6px">Scali da includere nel generale</h2>
+        <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px">Seleziona gli scali italiani da esportare.</p>
+        <div style="margin-bottom:10px"><button class="browse" id="gsx-all" style="margin:0;padding:4px 10px">Tutti</button> <button class="clear-all-btn" id="gsx-none" style="padding:4px 10px">Nessuno</button></div>
+        <div>${boxes}</div>
+        <div style="text-align:right;margin-top:16px"><button class="clear-all-btn" id="gsx-cancel" style="margin-right:6px">Annulla</button><button class="browse" id="gsx-ok" style="margin:0">Esporta</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      const checks = () => [...ov.querySelectorAll('.gsx')];
+      ov.querySelector('#gsx-all').addEventListener('click', () => checks().forEach(c => c.checked = true));
+      ov.querySelector('#gsx-none').addEventListener('click', () => checks().forEach(c => c.checked = false));
+      const done = v => { document.body.removeChild(ov); resolve(v); };
+      ov.querySelector('#gsx-cancel').addEventListener('click', () => done(null));
+      ov.addEventListener('click', e => { if (e.target === ov) done(null); });
+      ov.querySelector('#gsx-ok').addEventListener('click', () => {
+        const sel = checks().filter(c => c.checked).map(c => c.value);
+        if (!sel.length) { alert('Seleziona almeno uno scalo.'); return; }
+        try { localStorage.setItem('gen_scali_sel', JSON.stringify(sel)); } catch (e) {}
+        done(sel);
+      });
+    });
+  }
   async function exportGenerale() {
     if (!ALL.length) { alert('Memoria generale vuota.'); return; }
+    const allScali = [...new Set(ALL.map(r => String(r.scalo).toUpperCase()))].sort();
+    const sel = await pickScaliExport(allScali);
+    if (!sel) return;   // annullato
+    const selSet = new Set(sel);
+    const recs = ALL.filter(r => selSet.has(String(r.scalo).toUpperCase()));
+    if (!recs.length) { alert('Nessuna riga per gli scali scelti.'); return; }
     const wb = new ExcelJS.Workbook(); wb.creator = 'Filtro Liste — Generale';
     const views = [{ state: 'frozen', ySplit: 4 }];
-    // Feuille TUTTI (tous les aéroports)
-    writeGenSheet(wb.addWorksheet('TUTTI', { views }), ALL, 'TUTTI GLI SCALI');
-    // Une feuille par aéroport
+    // Feuille TUTTI (solo scali selezionati)
+    writeGenSheet(wb.addWorksheet('TUTTI', { views }), recs, sel.length === allScali.length ? 'TUTTI GLI SCALI' : 'SCALI: ' + sel.join(' · '));
+    // Une feuille par aéroport (selezionati)
     const byScalo = new Map();
-    for (const r of ALL) { const k = String(r.scalo).toUpperCase(); if (!byScalo.has(k)) byScalo.set(k, []); byScalo.get(k).push(r); }
+    for (const r of recs) { const k = String(r.scalo).toUpperCase(); if (!byScalo.has(k)) byScalo.set(k, []); byScalo.get(k).push(r); }
     for (const k of [...byScalo.keys()].sort()) writeGenSheet(wb.addWorksheet(k.slice(0, 31), { views }), byScalo.get(k), k);
     const buf = await wb.xlsx.writeBuffer();
     dl(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
@@ -3928,6 +4173,97 @@ const GEN = (() => {
          'ASSISTENZA_' + scalo + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
       await new Promise(r => setTimeout(r, 400));
     }
+  }
+
+  // ---- Regole per scalo: export/import Excel (soglie + orari) ----
+  const SCALI_COLS = [
+    ['thrImbarco','IMB_SOGLIA','n'], ['imbConvOffset','IMB_CONV_OFFSET','n'],
+    ['imbAddettoBefore','IMB_ADDETTO_BEFORE','n'], ['stdAfterImbarco','IMB_STD_AFTER','n'],
+    ['tptImbConv','IMB_TPT_CONV','t'], ['tptImbPart','IMB_TPT_PART','t'],
+    ['thrSbarco','SBA_SOGLIA','n'], ['sbConvOffset','SBA_CONV_OFFSET','n'],
+    ['sbAddettoBefore','SBA_ADDETTO_BEFORE','n'], ['stdAfterSbarco','SBA_STD_AFTER','n'],
+    ['tptSbarco','SBA_TPT_SBARCO','t'],
+  ];
+  async function exportScaliRules() {
+    const scali = RULES.navi.scali || {};
+    const codes = Object.keys(scali).sort();
+    if (!codes.length) { alert('Nessuno scalo configurato.'); return; }
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Filtro Liste — Regole scali';
+    const { BLUE, LINE } = PAL;
+    const thin = { style: 'thin', color: { argb: LINE } };
+    const box = { top: thin, bottom: thin, left: thin, right: thin };
+    const headStyle = c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLUE } };
+      c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = box; };
+    // Foglio SCALI (una riga per scalo)
+    const ws = wb.addWorksheet('SCALI', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const headers = ['SCALO', ...SCALI_COLS.map(c => c[1])];
+    ws.getRow(1).height = 30;
+    headers.forEach((h, j) => { const c = ws.getCell(1, j + 1); c.value = h; headStyle(c); });
+    let r = 2;
+    for (const code of codes) {
+      const sc = scali[code];
+      const c1 = ws.getCell(r, 1); c1.value = code; c1.font = { bold: true }; c1.border = box;
+      SCALI_COLS.forEach(([k, , type], j) => { const cell = ws.getCell(r, j + 2);
+        if (type === 'n') cell.value = sc[k] == null || sc[k] === '' ? '' : +sc[k];
+        else { cell.value = sc[k] || ''; cell.numFmt = '@'; }
+        cell.border = box; });
+      r++;
+    }
+    ws.getColumn(1).width = 10;
+    SCALI_COLS.forEach((c, j) => { ws.getColumn(j + 2).width = 15; });
+    // Foglio SBARCO_FASCE (orari arrivo bus per fascia; FINO_ORA vuoto = oltre)
+    const wf = wb.addWorksheet('SBARCO_FASCE', { views: [{ state: 'frozen', ySplit: 1 }] });
+    ['SCALO', 'FINO_ORA', 'ARRIVO_BUS'].forEach((h, j) => { const c = wf.getCell(1, j + 1); c.value = h; headStyle(c); });
+    let rf = 2;
+    for (const code of codes) {
+      for (const e of (scali[code].sbarcoTimes || [])) {
+        wf.getCell(rf, 1).value = code;
+        const c2 = wf.getCell(rf, 2); c2.value = e.untilMin != null ? hhmm(e.untilMin) : ''; c2.numFmt = '@';
+        const c3 = wf.getCell(rf, 3); c3.value = e.t || ''; c3.numFmt = '@';
+        [1, 2, 3].forEach(ci => { wf.getCell(rf, ci).border = box; });
+        rf++;
+      }
+    }
+    wf.getColumn(1).width = 10; wf.getColumn(2).width = 14; wf.getColumn(3).width = 14;
+    const buf = await wb.xlsx.writeBuffer();
+    dl(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+       'REGOLE_SCALI_COSTA_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  }
+  function _xlTime(v) {   // valore cella → 'HH:MM' (gestisce testo e frazione oraria Excel)
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') { if (v > 0 && v < 1) return hhmm(Math.round(v * 1440)); return String(v); }
+    const m = String(v).match(/(\d{1,2}):(\d{2})/); return m ? (m[1].padStart(2, '0') + ':' + m[2]) : String(v).trim();
+  }
+  async function importScaliRules(file) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const wb = XLSX.read(data, { type: 'array' });
+    const wsS = wb.Sheets['SCALI']; if (!wsS) throw new Error('Foglio « SCALI » mancante');
+    const rows = XLSX.utils.sheet_to_json(wsS, { defval: '' });
+    if (!rows.length) throw new Error('Foglio « SCALI » vuoto');
+    const fasce = {};
+    const wsF = wb.Sheets['SBARCO_FASCE'];
+    if (wsF) { for (const f of XLSX.utils.sheet_to_json(wsF, { defval: '' })) {
+      const code = String(f.SCALO || '').trim().toUpperCase(); if (!code) continue;
+      const t = _xlTime(f.ARRIVO_BUS); if (!t) continue;
+      const until = String(f.FINO_ORA || '').trim() === '' ? null : toMin(_xlTime(f.FINO_ORA));
+      (fasce[code] || (fasce[code] = [])).push({ untilMin: until, t });
+    } }
+    const next = {};
+    for (const row of rows) {
+      const code = String(row.SCALO || '').trim().toUpperCase(); if (!code) continue;
+      const sc = clone(RULES.navi.default);
+      for (const [k, col, type] of SCALI_COLS) {
+        const v = row[col];
+        if (type === 'n') sc[k] = (v === '' || v == null) ? sc[k] : (+v || 0);
+        else sc[k] = _xlTime(v);
+      }
+      sc.sbarcoTimes = fasce[code] || [];
+      next[code] = sc;
+    }
+    if (!Object.keys(next).length) throw new Error('Nessuno scalo valido nel file');
+    RULES.navi.scali = next;
+    saveRules();
   }
 
   // ---- Export lista di UN SOLO volo (passeggeri da assistere) ----
@@ -3999,6 +4335,9 @@ const GEN = (() => {
     const pax = rec.passeggeri || [];
     const st = flightStats(rec);
     const keys = pax.length ? Object.keys(pax[0]) : ['Cognome', 'Nome', 'Booking'];
+    // Colonne costanti (es. n° volo uguale per tutti) → ridondanti, già nell'intestazione: tolte.
+    const dropK = pax.length ? keys.filter(k => /volo|flt|flight/i.test(k) && pax.every(p => String(p[k] ?? '') === String(pax[0][k] ?? ''))) : [];
+    const vkeys = keys.filter(k => !dropK.includes(k));
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9998;display:flex;flex-direction:column';
     const stat = (k, v, hot) => `<div style="background:${hot ? 'var(--yellow-tint)' : 'var(--bg-soft)'};border:1px solid ${hot ? '#F0DCA8' : 'var(--line-soft)'};border-radius:10px;padding:8px 14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-mute)">${k}</div><div style="font-size:20px;font-weight:800;color:var(--blue-darker)">${v}</div></div>`;
@@ -4011,6 +4350,7 @@ const GEN = (() => {
         <div><h2 style="font-family:var(--d-disp,inherit);font-size:17px;color:var(--blue-darker)">${escapeHtml(shipTitleOf(rec))}</h2>
           <div style="font-size:12px;color:var(--ink-soft)">${rec.sens === 'P' ? 'SBARCO' : 'IMBARCO'} · volo ${escapeHtml(cleanVolo(rec.volo))} · ${escapeHtml(rec.scalo)} · ${escapeHtml(rec.data)} · STD ${escapeHtml(rec.std || '-')}</div></div>
         <div style="display:flex;gap:8px">
+          <button class="browse" id="fl-print" style="margin:0">Stampa</button>
           <button class="browse" id="fl-xls" style="margin:0">Excel</button>
           <button class="browse" id="fl-pdf" style="margin:0">PDF</button>
           <button class="clear-all-btn" id="fl-close">Chiudi</button></div>
@@ -4019,14 +4359,60 @@ const GEN = (() => {
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
           ${stat('Passeggeri', st.tot)}${stat('Bambini', st.bambini, st.bambini > 0)}${stat('Assistenza', st.assist, st.assist > 0)}${stat('Richieste', st.richieste.length, st.richieste.length > 0)}</div>
         ${reqHtml}
-        ${pax.length ? `<table style="width:100%;border-collapse:collapse;min-width:720px;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--bg-soft);text-align:left;font-size:10px;text-transform:uppercase;color:var(--ink-mute)">${keys.map(k => `<th style="padding:6px 8px;border-bottom:1px solid var(--line)">${escapeHtml(k)}</th>`).join('')}</tr></thead>
-          <tbody>${pax.map((p, i) => { const wc = WCH_RE.test(String(p.Richiesta || '')); return `<tr style="border-bottom:1px solid var(--line-soft);${wc ? 'background:var(--yellow-tint)' : (i % 2 ? 'background:var(--bg-soft)' : '')}">${keys.map(k => `<td style="padding:5px 8px">${escapeHtml(p[k] == null ? '' : String(p[k]))}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`
+        ${pax.length ? `<table style="width:100%;border-collapse:collapse;min-width:720px;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--bg-soft);text-align:left;font-size:10px;text-transform:uppercase;color:var(--ink-mute)">${vkeys.map(k => `<th style="padding:6px 8px;border-bottom:1px solid var(--line)">${escapeHtml(k)}</th>`).join('')}</tr></thead>
+          <tbody>${pax.map((p, i) => { const wc = WCH_RE.test(String(p.Richiesta || '')); return `<tr style="border-bottom:1px solid var(--line-soft);${wc ? 'background:var(--yellow-tint)' : (i % 2 ? 'background:var(--bg-soft)' : '')}">${vkeys.map(k => `<td style="padding:5px 8px">${escapeHtml(p[k] == null ? '' : String(p[k]))}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`
           : `<div style="font-size:13px;color:var(--ink-mute)">Nessun passeggero in memoria per questo volo (dati solo locali, non nel cloud).</div>`}
       </div>`;
     document.body.appendChild(ov);
     ov.querySelector('#fl-close').addEventListener('click', () => document.body.removeChild(ov));
+    ov.querySelector('#fl-print').addEventListener('click', () => printFlightList(rec));
     ov.querySelector('#fl-xls').addEventListener('click', () => exportFlightList(rec));
     ov.querySelector('#fl-pdf').addEventListener('click', () => exportFlightPDF(rec));
+  }
+
+  // ---- Stampa lista volo (finestra pulita, formato A4) ----
+  function printFlightList(rec) {
+    const pax = rec.passeggeri || [];
+    if (!pax.length) { alert('Nessun passeggero in memoria per questo volo (dati solo locali, non nel cloud).'); return; }
+    const st = flightStats(rec);
+    const keys = Object.keys(pax[0]);
+    const drop = keys.filter(k => /volo|flt|flight/i.test(k) && pax.every(p => String(p[k] ?? '') === String(pax[0][k] ?? '')));
+    const cols = keys.filter(k => !drop.includes(k));
+    const esc = escapeHtml;
+    const sens = rec.sens === 'P' ? 'SBARCO' : 'IMBARCO';
+    const reqRows = st.richieste.map(r => `<div class="req"><b>${esc(r.nome)}</b> — ${esc(r.req)}</div>`).join('');
+    const body = pax.map(p => { const wc = WCH_RE.test(String(p.Richiesta || '')); return `<tr${wc ? ' class="wc"' : ''}>${cols.map(k => `<td>${esc(p[k] == null ? '' : String(p[k]))}</td>`).join('')}</tr>`; }).join('');
+    const logo = (typeof COSTA_LOGO_XL_B64 !== 'undefined' && COSTA_LOGO_XL_B64) ? `<img src="data:image/png;base64,${COSTA_LOGO_XL_B64}" alt="">` : '';
+    const w = window.open('', '_blank');
+    if (!w) { alert('Impossibile aprire la finestra di stampa (popup bloccato). Autorizza i popup per questo sito.'); return; }
+    w.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Lista ${esc(cleanVolo(rec.volo))} ${esc(rec.scalo)} ${esc(rec.data)}</title>
+      <style>
+        *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#0D2238;margin:24px}
+        .hd{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1E4F8C;padding-bottom:10px;margin-bottom:12px}
+        .hd img{height:46px;width:auto}
+        h1{font-size:18px;color:#1E4F8C;margin:0}
+        .sub{font-size:12px;color:#4A5568;margin-top:3px}
+        .stats{font-size:12px;margin:0 0 12px}.stats b{color:#1E4F8C}
+        .reqs{border:1px solid #E5A427;background:#FDF4DC;border-radius:8px;padding:8px 10px;margin-bottom:12px}
+        .reqs h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#C68A12;margin:0 0 4px}
+        .req{font-size:12px;margin:2px 0}
+        table{width:100%;border-collapse:collapse;font-size:11px}
+        th{background:#1E4F8C;color:#fff;text-align:left;padding:5px 7px;border:1px solid #1E4F8C}
+        td{padding:4px 7px;border:1px solid #D5DEEA}
+        tr.wc td{background:#FDEFC9;font-weight:bold}
+        tbody tr:nth-child(even):not(.wc) td{background:#F7F9FC}
+        .ftr{position:fixed;bottom:5mm;left:0;right:0;text-align:center;font-size:10px;color:#8B95A6;letter-spacing:.14em;text-transform:uppercase}
+        @media print{ body{margin:0;padding:12mm 10mm 16mm} thead{display:table-header-group} tr{page-break-inside:avoid} }
+        @page{ size:A4 ${cols.length > 7 ? 'landscape' : 'portrait'}; margin:0 }
+      </style></head><body>
+      <div class="hd">${logo}<div><h1>${esc(shipTitleOf(rec))}</h1><div class="sub">${sens} · volo ${esc(cleanVolo(rec.volo))} · ${esc(rec.scalo)} · ${esc(rec.data)} · STD ${esc(rec.std || '-')}</div></div></div>
+      <div class="stats">Passeggeri: <b>${st.tot}</b> &nbsp;·&nbsp; Bambini: <b>${st.bambini}</b> &nbsp;·&nbsp; Assistenza: <b>${st.assist}</b> &nbsp;·&nbsp; Richieste speciali: <b>${st.richieste.length}</b></div>
+      ${st.richieste.length ? `<div class="reqs"><h3>Richieste speciali (${st.richieste.length})</h3>${reqRows}</div>` : ''}
+      <table><thead><tr>${cols.map(k => `<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>
+      <div class="ftr">by LBS</div>
+      </body></html>`);
+    w.document.close(); w.focus();
+    setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
   }
 
   // ---- Export PDF dettagliato di un volo ----
@@ -4301,45 +4687,46 @@ const GEN = (() => {
   function scaliEditorHtml() {
     const scali = RULES.navi.scali || {};
     const card = (code, c) => {
-      const num = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}${hb(SCALO_HELP[k])}<br><input data-sc="${code}" data-k="${k}" type="number" value="${c[k] == null ? '' : c[k]}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
-      const tim = (k, lbl) => `<label style="font-size:11px;color:var(--ink-soft)">${lbl}${hb(SCALO_HELP[k])}<br><input data-sc="${code}" data-k="${k}" type="text" placeholder="HH:MM" value="${c[k] || ''}" style="width:70px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
+      const fld = (k, lbl, isTime) => `<label style="display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:600;color:var(--ink-soft);line-height:1.25;max-width:116px">${lbl}${hb(SCALO_HELP[k])}<input data-sc="${code}" data-k="${k}" type="${isTime ? 'text' : 'number'}"${isTime ? ' placeholder="HH:MM"' : ''} value="${isTime ? (c[k] || '') : (c[k] == null ? '' : c[k])}" style="width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg);font-size:12px;font-variant-numeric:tabular-nums"></label>`;
+      const num = (k, lbl) => fld(k, lbl, false);
+      const tim = (k, lbl) => fld(k, lbl, true);
+      const grid = html => `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">${html}</div>`;
+      const panel = (accent, tint, title, sub, body) => `<div style="flex:1 1 300px;min-width:258px;background:${tint};border:1px solid var(--line);border-radius:12px;padding:12px 13px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${accent};flex-shrink:0"></span>
+            <span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:${accent}">${title}</span>
+            <span style="font-size:9.5px;color:var(--ink-mute);font-weight:500">${sub}</span>
+          </div>${body}</div>`;
       const rows = (c.sbarcoTimes || []).map((e, i) => `<tr>
-        <td style="padding:2px"><input data-sc="${code}" data-sbi="${i}" data-sbk="until" type="text" placeholder="oltre" value="${e.untilMin != null ? hhmm(e.untilMin) : ''}" style="width:66px;padding:3px;border:1px solid var(--line);border-radius:6px"></td>
-        <td style="padding:2px;color:var(--ink-mute)">→</td>
-        <td style="padding:2px"><input data-sc="${code}" data-sbi="${i}" data-sbk="t" type="text" placeholder="HH:MM" value="${e.t || ''}" style="width:66px;padding:3px;border:1px solid var(--line);border-radius:6px"></td>
-        <td style="padding:2px"><button data-sc="${code}" data-sbdel="${i}" class="clear-all-btn" style="padding:2px 7px">✕</button></td></tr>`).join('');
-      const grp = t => `<div style="font-size:10.5px;font-weight:700;color:var(--blue);margin:10px 0 4px;letter-spacing:.04em">${t}</div>`;
-      return `<div class="filter-section" style="margin:10px 0">
-        <div class="fs-label">${escapeHtml(code)} <button data-scdel="${code}" class="clear-all-btn" style="padding:2px 8px;margin-left:8px">Elimina scalo</button></div>
-
-        ${grp('IMBARCO — il volo arriva (riferimento = atterraggio)')}
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${num('thrImbarco', 'Soglia assistenza (PAX)')}
-          ${num('imbConvOffset', 'Convocazione pax = atterraggio − (min)')}
-          ${num('imbAddettoBefore', 'Inizio addetto = convocazione − (min)')}
-          ${num('stdAfterImbarco', 'STD = atterraggio + (min)')}
+          <td style="padding:2px 3px 2px 0"><input data-sc="${code}" data-sbi="${i}" data-sbk="until" type="text" placeholder="oltre" value="${e.untilMin != null ? hhmm(e.untilMin) : ''}" style="width:70px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums"></td>
+          <td style="padding:2px 4px;color:var(--ink-mute)">&rarr;</td>
+          <td style="padding:2px 3px"><input data-sc="${code}" data-sbi="${i}" data-sbk="t" type="text" placeholder="HH:MM" value="${e.t || ''}" style="width:70px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums"></td>
+          <td style="padding:2px"><button data-sc="${code}" data-sbdel="${i}" class="clear-all-btn" style="padding:2px 7px">&times;</button></td></tr>`).join('');
+      const imb = panel('var(--blue)', 'var(--blue-tint)', 'IMBARCO', 'il volo arriva · rif. atterraggio',
+        grid(num('thrImbarco', 'Soglia PAX') + num('imbConvOffset', 'Conv. −min') + num('imbAddettoBefore', 'Addetto −min')
+           + num('stdAfterImbarco', 'STD +min') + tim('tptImbConv', 'TPT conv.') + tim('tptImbPart', 'TPT part.')));
+      const sba = panel('var(--yellow-deep)', 'var(--yellow-tint)', 'SBARCO', 'il volo parte · rif. arrivo bus',
+        grid(num('thrSbarco', 'Soglia PAX') + num('sbConvOffset', 'Conv. −min') + num('sbAddettoBefore', 'Addetto −min')
+           + num('stdAfterSbarco', 'STD +min') + tim('tptSbarco', 'TPT bus'))
+        + `<div style="margin-top:11px;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-mute)">Arrivo bus per fascia <span style="font-weight:500;text-transform:none">· fino alle (vuoto = oltre) &rarr; arrivo</span></div>
+           <table style="margin-top:5px;border-collapse:collapse"><tbody>${rows}</tbody></table>
+           <button data-scaddrow="${code}" class="browse" style="margin:6px 0 0;padding:4px 10px">+ riga orario</button>`);
+      return `<div class="filter-section" style="margin:10px 0;padding:14px 15px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="display:inline-flex;align-items:center;height:26px;padding:0 13px;border-radius:999px;background:var(--blue);color:#fff;font-weight:800;font-size:12.5px;letter-spacing:.03em">${escapeHtml(code)}</span>
+          <button data-scdel="${code}" class="clear-all-btn" style="margin-left:auto;padding:3px 10px">Elimina scalo</button>
         </div>
-        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${tim('tptImbConv', 'TPT: convocazione (HH:MM)')}${tim('tptImbPart', 'TPT: partenza / STD (HH:MM)')}
-        </div>
-
-        ${grp('SBARCO — il volo parte (riferimento = arrivo bus)')}
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${num('thrSbarco', 'Soglia assistenza (PAX)')}
-          ${num('sbConvOffset', 'Convocazione pax = arrivo bus − (min)')}
-          ${num('sbAddettoBefore', 'Inizio addetto = convocazione − (min)')}
-          ${num('stdAfterSbarco', 'STD = arrivo bus + (min)')}
-        </div>
-        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${tim('tptSbarco', 'TPT: arrivo bus (HH:MM)')}
-        </div>
-        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Orari arrivo bus per fascia — voli fino alle (vuoto = oltre) → arrivo bus</div>
-        <table style="margin-top:4px;border-collapse:collapse"><tbody>${rows}</tbody></table>
-        <button data-scaddrow="${code}" class="browse" style="margin:6px 0 0;padding:4px 10px">+ riga orario</button>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">${imb}${sba}</div>
       </div>`;
     };
     const cards = Object.keys(scali).sort().map(k => card(k, scali[k])).join('');
-    return cards + `<div style="margin-top:8px"><input id="gen-newscalo" type="text" placeholder="CODICE (es. BLQ)" style="width:130px;padding:5px;border:1px solid var(--line);border-radius:6px"><button id="gen-addscalo" class="browse" style="margin-left:6px;padding:5px 12px">+ Aggiungi scalo</button></div>`;
+    const bar = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 14px">
+        <button id="gen-scali-xlsx-export" class="browse" style="margin:0;padding:6px 13px">Esporta scali (Excel)</button>
+        <button id="gen-scali-xlsx-import" class="browse" style="margin:0;padding:6px 13px">Importa scali (Excel)</button>
+        <input id="gen-scali-xlsx-file" type="file" accept=".xlsx,.xls" style="display:none">
+        <span style="font-size:10.5px;color:var(--ink-mute)">Soglie e orari modificabili in Excel, poi reimporta.</span>
+      </div>`;
+    return bar + cards + `<div style="margin-top:8px"><input id="gen-newscalo" type="text" placeholder="CODICE (es. BLQ)" style="width:150px;padding:6px 9px;border:1px solid var(--line);border-radius:7px"><button id="gen-addscalo" class="browse" style="margin-left:6px;padding:6px 13px">+ Aggiungi scalo</button></div>`;
   }
 
   function setPath(obj, path, val) { const ks = path.split('.'); let o = obj; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]] = o[ks[i]] || {}; o[ks[ks.length - 1]] = val; }
@@ -4349,22 +4736,53 @@ const GEN = (() => {
     const chk = (p, lbl) => `<label style="display:block;font-size:12px;margin:3px 0"><input type="checkbox" data-r="${p}" ${getPath(R, p) ? 'checked' : ''}> ${lbl}${hb(GEN_HELP[p])}</label>`;
     const numr = (p, lbl, step) => `<label style="font-size:11px;color:var(--ink-soft);margin:0 12px 6px 0;display:inline-block">${lbl}${hb(GEN_HELP[p])}<br><input type="number" ${step ? `step="${step}"` : ''} data-r="${p}" value="${getPath(R, p) == null ? '' : getPath(R, p)}" style="width:80px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`;
     const TYPES = ['787', '737', 'ITA', 'CX', 'ALTRI'];
-    const convRowsFor = (setName, obj) => Object.entries(obj.convByType).map(([tp, r]) => `<tr><td style="padding:2px 8px;font-weight:600">${tp}</td>
-       <td style="padding:2px"><input type="number" step="0.5" data-conv="${tp}" data-ck="h" data-set="${setName}" value="${r.h}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> h prima</td>
-       <td style="padding:2px"><input type="number" data-conv="${tp}" data-ck="pre" data-set="${setName}" value="${r.pre}" style="width:58px;padding:3px;border:1px solid var(--line);border-radius:6px"> min inizio</td></tr>`).join('');
+    const convRowFor = (setName, tp, r) => `<div class="convt-row" data-set="${setName}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="convt-type" type="text" value="${escapeHtml(tp)}" placeholder="es. 787" style="width:90px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       <input class="convt-h" type="number" step="0.5" value="${r.h}" style="width:58px;padding:4px;border:1px solid var(--line);border-radius:6px"> h prima
+       <input class="convt-pre" type="number" value="${r.pre}" style="width:58px;padding:4px;border:1px solid var(--line);border-radius:6px"> min inizio
+       ${tp ? `<button data-convtdel="${escapeHtml(tp)}" data-set="${setName}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const convRowsFor = (setName, obj) => Object.entries(obj.convByType).map(([tp, r]) => convRowFor(setName, tp, r)).join('') + convRowFor(setName, '', { h: 3, pre: 30 });
+    const mpxRowFor = (setName, t, n) => `<div class="mpx-row" data-set="${setName}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="mpx-type" type="text" value="${escapeHtml(t)}" placeholder="es. 787" style="width:90px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       <input class="mpx-n" type="number" value="${n === '' ? '' : n}" placeholder="pax" style="width:72px;padding:4px;border:1px solid var(--line);border-radius:6px"> pax max
+       ${t ? `<button data-mpxdel="${escapeHtml(t)}" data-set="${setName}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const mpxRowsFor = (setName, obj) => Object.entries(obj.maxPaxByType || {}).map(([t, n]) => mpxRowFor(setName, t, n)).join('') + mpxRowFor(setName, '', '');
     const acfRowFor = (setName, v, tp) => `<div class="acf-row" data-set="${setName}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
        <input class="acf-volo" type="text" value="${v}" placeholder="es. AZ 123" style="width:120px;padding:4px;border:1px solid var(--line);border-radius:6px">→
        <select class="acf-tipo" style="padding:4px;border:1px solid var(--line);border-radius:6px">${TYPES.map(o => `<option ${o === tp ? 'selected' : ''}>${o}</option>`).join('')}</select>
        ${v ? `<button data-acfdel="${v}" data-set="${setName}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
     const acfRowsFor = (setName, obj) => Object.entries(obj.aircraftByFlight || {}).map(([v, tp]) => acfRowFor(setName, v, tp)).join('') + acfRowFor(setName, '', '787');
+    const convcRowFor = (setName, carrier, r) => `<div class="convc-row" data-set="${setName}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="convc-carrier" type="text" value="${carrier}" placeholder="es. QR" style="width:70px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       <input class="convc-h" type="number" step="0.5" value="${r.h}" style="width:58px;padding:4px;border:1px solid var(--line);border-radius:6px"> h prima
+       <input class="convc-pre" type="number" value="${r.pre}" style="width:58px;padding:4px;border:1px solid var(--line);border-radius:6px"> min inizio
+       ${carrier ? `<button data-convcdel="${carrier}" data-set="${setName}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const convcRowsFor = (setName, obj) => Object.entries(obj.convByCarrier || {}).map(([c, r]) => convcRowFor(setName, c, r)).join('') + convcRowFor(setName, '', { h: 3, pre: 30 });
+    const shipRowFor = (metier, name) => `<div class="shipm-row" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="shipm-name" data-metier="${metier}" data-orig="${escapeHtml(name)}" type="text" value="${escapeHtml(name)}" placeholder="NOME NAVE" style="width:180px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       ${name ? `<button data-shipmdel="${escapeHtml(name)}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const shipRowsFor = (metier) => Object.keys(R.shipMode).filter(s => R.shipMode[s] === metier).sort().map(s => shipRowFor(metier, s)).join('') + shipRowFor(metier, '');
+    const tsaRowFor = (name, apts) => `<div class="tsa-row" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="tsa-name" data-orig="${escapeHtml(name)}" type="text" value="${escapeHtml(name)}" placeholder="FORNITORE" style="width:150px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       <span style="color:var(--ink-mute);font-size:11px">aeroporti</span>
+       <input class="tsa-apts" type="text" value="${escapeHtml((apts || []).join(', '))}" placeholder="tutti" style="width:180px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       ${name ? `<button data-tsadel="${escapeHtml(name)}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const tsaRowsFor = () => Object.entries((R.filters && R.filters.transferSupplierAirports) || {}).map(([n, a]) => tsaRowFor(n, a)).join('') + tsaRowFor('', []);
+    const portRow = (kind, key, val) => `<div class="port-row" data-kind="${kind}" style="display:flex;gap:6px;margin:3px 0;align-items:center">
+       <input class="port-key" type="text" value="${escapeHtml(key)}" placeholder="${kind === 'scalo' ? 'SCALO' : 'NAVE'}" style="width:140px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       <span style="color:var(--ink-mute)">→</span>
+       <input class="port-val" type="text" value="${escapeHtml(val)}" placeholder="PORTO" style="width:150px;padding:4px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase">
+       ${key ? `<button data-portdel="${escapeHtml(key)}" data-kind="${kind}" class="clear-all-btn" style="padding:2px 7px">✕</button>` : ''}</div>`;
+    const portRowsFor = (kind, obj) => Object.entries(obj || {}).map(([k, v]) => portRow(kind, k, v)).join('') + portRow(kind, '', '');
     const flightSec = (setName, obj, title) => sec(title,
-      `<div>${numr(setName + '.threshold', 'Soglia PAX')}${numr(setName + '.gapMin', 'Finestra raggruppamento (min)')}</div>` +
+      `<div style="font-size:11px;font-weight:700;color:var(--ink-mute)">Navi assegnate a questo metier</div>${shipRowsFor(setName.toUpperCase())}` +
+      `<div style="margin-top:8px">${numr(setName + '.threshold', 'Soglia PAX')}${numr(setName + '.gapMin', 'Finestra raggruppamento (min)')}</div>` +
       chk(setName + '.transitReportAtTakeoff', 'Transito: fine turno = report al decollo') +
-      `<div>${numr(setName + '.checkinCloseBeforeMin', 'Transito: inizio = chiusura check-in − (min)')}</div>` +
+      `<div>${numr(setName + '.transitAssistMin', 'Transito: assistenza prima dello STD (min)')}${numr(setName + '.checkinCloseBeforeMin', 'Transito: convocazione = STD − (min)')}</div>` +
       `<label style="font-size:11px;color:var(--ink-soft)">Scali ITA (separati da virgola)<br><input type="text" data-r="${setName}.itaScali" value="${(obj.itaScali || []).join(', ')}" style="width:260px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>` +
-      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo</div><table style="margin-top:4px">${convRowsFor(setName, obj)}</table>` +
-      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Capienza max per tipo (il tipo si deduce dai PAX del volo)</div><table style="margin-top:4px">` +
-      Object.entries(obj.maxPaxByType || {}).map(([t, n]) => `<tr><td style="padding:2px 8px;font-weight:600">${t}</td><td style="padding:2px"><input type="number" data-maxpax="${t}" data-set="${setName}" value="${n}" style="width:72px;padding:3px;border:1px solid var(--line);border-radius:6px"> pax max</td></tr>`).join('') + `</table>` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per tipo aereo <span style="font-weight:500">(787/737 collegati alla capienza qui sotto)</span></div>${convRowsFor(setName, obj)}` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Convocazione per vettore <span style="font-weight:500;color:var(--ink-mute)">(override; prioritaria sul tipo aereo · es. QR)</span></div>${convcRowsFor(setName, obj)}` +
+      `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Capienza max per tipo (il tipo si deduce dai PAX del volo)</div>${mpxRowsFor(setName, obj)}` +
       `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Tipo aereo per volo (prioritario sulla capienza; vuoto: CX dal vettore · capienza · ITA · ALTRI)</div>${acfRowsFor(setName, obj)}`);
     const ships = Object.entries(R.shipMode).map(([s, m]) => `<div style="display:flex;gap:6px;align-items:center;margin:2px 0">
        <span style="width:120px;font-size:12px">${escapeHtml(s)}</span>
@@ -4377,8 +4795,12 @@ const GEN = (() => {
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
         `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}<span class="help" title="Gli orari (inizio addetto, STD imbarco/sbarco) si impostano per scalo in « Configurazione per scalo ».">?</span></div>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`),
-      flightSec('charter', c, 'CHARTER (voli · Deliziosa, Serena)'),
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Vettori sempre al Terminal 2 MXP (codici, separati da virgola)${hb('I voli di questi vettori sono trattati come T2 Malpensa anche senza T2 nel testo. Es. U2 = easyJet.')}<br><input type="text" data-r="navi.t2Carriers" value="${escapeHtml((R.navi.t2Carriers || []).join(', '))}" style="width:260px;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<div style="margin-top:8px">${numr('navi.fineTurnoAfterMin', 'Fine turno = STD max del turno + (min)')}</div>` +
+        `<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto per scalo (DESTINAZIONE; prioritario)</div>${portRowsFor('scalo', R.navi.portByScalo)}` +
+        `<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto per nave (nord: SVN Savona / GOA Genova)</div>${portRowsFor('nave', R.navi.portByNave)}`),
+      flightSec('charter', c, 'CHARTER (voli charter)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
       sec('Voli → metier (per numero PAX)',
         `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px">Un volo con più di <b>soglia</b> PAX è CHARTER, altrimenti NORMALE. Il tipo aereo (787/737) resta dedotto dalla capienza nei blocchi CHARTER/NORMALE.</div>` +
@@ -4390,9 +4812,13 @@ const GEN = (() => {
         `<label style="font-size:11px;color:var(--ink-soft)">Parole chiave sedia a rotelle (separate da |)${hb(GEN_HELP['wheelchairRegex'])}<br><input type="text" data-r="wheelchairRegex" value="${escapeHtml(R.wheelchairRegex || '')}" style="width:380px;margin-top:3px;padding:4px;border:1px solid var(--line);border-radius:6px"></label>`),
       sec('Filtri liste (separati da virgola)',
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Flight PRE · Aeroporti italiani tenuti${hb(GEN_HELP['filters.italianAirports'])}<br><textarea data-r="filters.italianAirports" spellcheck="false" style="width:100%;height:56px;margin-top:3px;padding:6px;border:1px solid var(--line);border-radius:7px;font-family:monospace;font-size:11px">${(R.filters && R.filters.italianAirports || []).join(', ')}</textarea></label>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-bottom:8px">Transfer · Fornitori tenuti${hb(GEN_HELP['filters.transferSuppliers'])}<br><input type="text" data-r="filters.transferSuppliers" value="${escapeHtml((R.filters && R.filters.transferSuppliers || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft)">Stati esclusi (match esatto o prefisso)${hb(GEN_HELP['filters.excludedStatuses'])}<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
-        `<div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Si applica alle liste caricate dopo la modifica.</div>`),
+        `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:4px">Transfer · Fornitori tenuti ${hb('Ogni riga: un fornitore e gli aeroporti dove è tenuto (vuoto = tutti). Aggiungi una riga per gestire un nuovo fornitore: si applica subito anche alle liste già caricate.')}</div>${tsaRowsFor()}` +
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:10px">Stati esclusi (match esatto o prefisso)${hb(GEN_HELP['filters.excludedStatuses'])}<br><input type="text" data-r="filters.excludedStatuses" value="${escapeHtml((R.filters && R.filters.excludedStatuses || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<div style="font-size:10px;color:var(--ink-mute);margin-top:6px">Le modifiche si applicano subito alle liste già caricate (ri-filtrate dalle righe originali).</div>`),
+      sec('Tipo aereo in tempo reale (AeroDataBox)',
+        `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px">Recupera il modello reale per numero volo + data (RapidAPI · AeroDataBox) e lo usa al posto della deduzione dai PAX. La chiave resta su questo dispositivo (localStorage), non nel codice né in Git.</div>` +
+        `<label style="font-size:11px;color:var(--ink-soft)">Chiave RapidAPI${hb('Header X-RapidAPI-Key del tuo account RapidAPI, abbonamento ad AeroDataBox. Esposta solo localmente in questo browser.')}<br><input id="gen-adb-key" type="password" autocomplete="off" value="${escapeHtml(ADB_KEY)}" placeholder="X-RapidAPI-Key" style="width:320px;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
+        `<div style="margin-top:8px"><button id="gen-adb-clear" class="clear-all-btn" style="padding:4px 10px">Svuota cache tipi</button> <span style="font-size:10.5px;color:var(--ink-mute)">${Object.keys(ACFT_TYPE).filter(k => ACFT_TYPE[k]).length} voli risolti in cache${ADB_KEY ? '' : ' · chiave assente → deduzione PAX'}</span></div>`),
       sec('Backup regole',
         `<button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>` +
         `<button id="gen-rules-import" class="browse" style="margin:0 0 0 6px;padding:5px 12px">Importa regole (file)</button>` +
@@ -4466,34 +4892,60 @@ const GEN = (() => {
         const refreshAdv = () => { dwrap.innerHTML = advancedEditorHtml(); };
         const rebuildAcf = () => { for (const set of ['charter', 'normale']) { if (!RULES[set]) continue; const m = {};
           dwrap.querySelectorAll('.acf-row[data-set="' + set + '"]').forEach(r => { const v = r.querySelector('.acf-volo').value.trim(); const tp = r.querySelector('.acf-tipo').value; if (v) m[v] = tp; }); RULES[set].aircraftByFlight = m; } };
+        const rebuildConvc = () => { for (const set of ['charter', 'normale']) { if (!RULES[set]) continue; const m = {};
+          dwrap.querySelectorAll('.convc-row[data-set="' + set + '"]').forEach(r => { const c = r.querySelector('.convc-carrier').value.trim().toUpperCase(); const h = +r.querySelector('.convc-h').value; const pre = +r.querySelector('.convc-pre').value; if (c) m[c] = { h: h || 0, pre: pre || 0 }; }); RULES[set].convByCarrier = m; } };
+        const rebuildConvt = () => { for (const set of ['charter', 'normale']) { if (!RULES[set]) continue; const m = {};
+          dwrap.querySelectorAll('.convt-row[data-set="' + set + '"]').forEach(r => { const tp = r.querySelector('.convt-type').value.trim().toUpperCase(); const h = +r.querySelector('.convt-h').value; const pre = +r.querySelector('.convt-pre').value; if (tp) m[tp] = { h: h || 0, pre: pre || 0 }; }); RULES[set].convByType = m; } };
+        const rebuildMpx = () => { for (const set of ['charter', 'normale']) { if (!RULES[set]) continue; const m = {};
+          dwrap.querySelectorAll('.mpx-row[data-set="' + set + '"]').forEach(r => { const tp = r.querySelector('.mpx-type').value.trim().toUpperCase(); const n = +r.querySelector('.mpx-n').value; if (tp && n > 0) m[tp] = n; }); RULES[set].maxPaxByType = m; } };
+        const rebuildTsa = () => { const m = {}; RULES.filters = RULES.filters || {};
+          dwrap.querySelectorAll('.tsa-row').forEach(r => { const n = r.querySelector('.tsa-name').value.trim().toUpperCase(); if (!n) return;
+            const apts = r.querySelector('.tsa-apts').value.split(',').map(x => x.trim().toUpperCase()).filter(Boolean); m[n] = apts; }); RULES.filters.transferSupplierAirports = m; };
+        const rebuildPorts = () => { for (const kind of ['scalo', 'nave']) { const m = {};
+          dwrap.querySelectorAll('.port-row[data-kind="' + kind + '"]').forEach(r => { const k = r.querySelector('.port-key').value.trim().toUpperCase(); const v = r.querySelector('.port-val').value.trim().toUpperCase(); if (k) m[k] = v; });
+          RULES.navi[kind === 'scalo' ? 'portByScalo' : 'portByNave'] = m; } };
         refreshAdv();
         dwrap.addEventListener('change', async e => {
           const t = e.target;
+          if (t.id === 'gen-adb-key') { ADB_KEY = t.value.trim(); try { localStorage.setItem('adb_apikey', ADB_KEY); } catch (e) {} resolveAircraftTypes(); return; }
           if (t.id === 'gen-rules-import-file') { const f = t.files[0]; if (!f) return;
             try { RULES = deepMerge(clone(DEF_RULES), JSON.parse(await f.text())); saveRules(); refreshAll(); await recomputeAll(); render(); }
             catch (err) { alert('File regole non valido: ' + (err.message || err)); } t.value = ''; return; }
           if (t.dataset.r) { let v = t.type === 'checkbox' ? t.checked : (t.type === 'number' ? +t.value : t.value);
-            const UP = ['charter.itaScali', 'normale.itaScali', 'filters.italianAirports', 'filters.excludedStatuses', 'navi.foreignShips'];
+            const UP = ['charter.itaScali', 'normale.itaScali', 'filters.italianAirports', 'filters.excludedStatuses', 'navi.foreignShips', 'navi.t2Carriers'];
             const KEEP = ['filters.transferSuppliers'];
             if (UP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
             else if (KEEP.includes(t.dataset.r)) v = String(t.value).split(',').map(s => s.trim()).filter(Boolean);
             setPath(RULES, t.dataset.r, v);
-            if (t.dataset.r.startsWith('filters.')) applyFilterCfg(RULES.filters); }
-          else if (t.dataset.conv) { const set = t.dataset.set || 'charter'; const o = RULES[set].convByType[t.dataset.conv] || (RULES[set].convByType[t.dataset.conv] = {}); o[t.dataset.ck] = +t.value; }
-          else if (t.dataset.maxpax) { const set = t.dataset.set || 'charter'; (RULES[set].maxPaxByType || (RULES[set].maxPaxByType = {}))[t.dataset.maxpax] = +t.value; }
+            if (t.dataset.r.startsWith('filters.')) { applyFilterCfg(RULES.filters); refilterAllSessions(); } }
+          else if (t.classList.contains('convt-type') || t.classList.contains('convt-h') || t.classList.contains('convt-pre')) { rebuildConvt(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
+          else if (t.classList.contains('mpx-type') || t.classList.contains('mpx-n')) { rebuildMpx(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
           else if (t.dataset.ship) { RULES.shipMode[t.dataset.ship] = t.value; }
           else if (t.classList.contains('acf-volo') || t.classList.contains('acf-tipo')) { rebuildAcf(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
+          else if (t.classList.contains('convc-carrier') || t.classList.contains('convc-h') || t.classList.contains('convc-pre')) { rebuildConvc(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
+          else if (t.classList.contains('tsa-name') || t.classList.contains('tsa-apts')) { rebuildTsa(); applyFilterCfg(RULES.filters); refilterAllSessions(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
+          else if (t.classList.contains('port-key') || t.classList.contains('port-val')) { rebuildPorts(); saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
+          else if (t.classList.contains('shipm-name')) { const metier = t.dataset.metier, orig = t.dataset.orig, nn = t.value.trim().toUpperCase();
+            if (!nn) { if (orig) delete RULES.shipMode[orig]; } else { if (orig && orig !== nn) delete RULES.shipMode[orig]; RULES.shipMode[nn] = metier; }
+            saveRules(); await recomputeAll(); render(); refreshAdv(); return; }
           else return;
           saveRules(); await recomputeAll(); render();
         });
         dwrap.addEventListener('click', async e => {
           const t = e.target;
+          if (t.id === 'gen-adb-clear') { ACFT_TYPE = {}; _acftSave(); computeEngine(ALL); render(); refreshAdv(); return; }
           if (t.id === 'gen-rules-export') { dl(new Blob([JSON.stringify(RULES, null, 2)], { type: 'application/json' }), 'regole_costa.json'); return; }
           if (t.id === 'gen-rules-import') { dwrap.querySelector('#gen-rules-import-file')?.click(); return; }
           if (t.id === 'gen-rules-default') { if (!confirm('Ripristinare TUTTE le regole ai valori di default?')) return; RULES = clone(DEF_RULES); saveRules(); refreshAll(); await recomputeAll(); render(); return; }
           if (t.id === 'gen-ship-add') { const inp = dwrap.querySelector('#gen-ship-new'); const v = (inp && inp.value || '').trim().toUpperCase(); if (v) { RULES.shipMode[v] = RULES.shipMode[v] || 'NAVI'; saveRules(); refreshAdv(); await recomputeAll(); render(); } return; }
           if (t.dataset.shipdel) { delete RULES.shipMode[t.dataset.shipdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
           if (t.dataset.acfdel) { const set = t.dataset.set || 'charter'; delete RULES[set].aircraftByFlight[t.dataset.acfdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.convcdel) { const set = t.dataset.set || 'charter'; delete (RULES[set].convByCarrier || {})[t.dataset.convcdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.shipmdel) { delete RULES.shipMode[t.dataset.shipmdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.tsadel) { RULES.filters = RULES.filters || {}; const m = RULES.filters.transferSupplierAirports || {}; delete m[t.dataset.tsadel]; RULES.filters.transferSupplierAirports = m; applyFilterCfg(RULES.filters); refilterAllSessions(); saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.portdel) { const key = t.dataset.kind === 'scalo' ? 'portByScalo' : 'portByNave'; const m = RULES.navi[key] || {}; delete m[t.dataset.portdel]; RULES.navi[key] = m; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.convtdel) { const set = t.dataset.set || 'charter'; delete RULES[set].convByType[t.dataset.convtdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
+          if (t.dataset.mpxdel) { const set = t.dataset.set || 'charter'; delete RULES[set].maxPaxByType[t.dataset.mpxdel]; saveRules(); refreshAdv(); await recomputeAll(); render(); return; }
         });
         // ── Configurazione per scalo (editor dedicato) ──
         const sbox = document.createElement('details'); sbox.id = 'gen-scali-box'; sbox.open = true; sbox.style.marginTop = '12px';
@@ -4503,7 +4955,12 @@ const GEN = (() => {
         const refreshScali = () => { scaliWrap.innerHTML = scaliEditorHtml(); };
         refreshScali();
         scaliWrap.addEventListener('change', async e => {
-          const t = e.target, code = t.dataset.sc; if (!code) return;
+          const t = e.target;
+          if (t.id === 'gen-scali-xlsx-file') { const f = t.files[0];
+            if (f) { try { await importScaliRules(f); refreshScali(); await recomputeAll(); render(); }
+              catch (err) { alert('File scali non valido: ' + (err.message || err)); } }
+            t.value = ''; return; }
+          const code = t.dataset.sc; if (!code) return;
           const c = RULES.navi.scali[code]; if (!c) return;
           if (t.dataset.k) { c[t.dataset.k] = t.type === 'number' ? (+t.value || 0) : t.value.trim(); }
           else if (t.dataset.sbk) { const i = +t.dataset.sbi; c.sbarcoTimes = c.sbarcoTimes || []; const row = c.sbarcoTimes[i] || {};
@@ -4513,6 +4970,8 @@ const GEN = (() => {
         });
         scaliWrap.addEventListener('click', async e => {
           const t = e.target;
+          if (t.id === 'gen-scali-xlsx-export') { exportScaliRules(); return; }
+          if (t.id === 'gen-scali-xlsx-import') { scaliWrap.querySelector('#gen-scali-xlsx-file')?.click(); return; }
           if (t.id === 'gen-addscalo') { const inp = scaliWrap.querySelector('#gen-newscalo'); const v = (inp && inp.value || '').trim().toUpperCase();
             if (v && !RULES.navi.scali[v]) { RULES.navi.scali[v] = clone(RULES.navi.default); saveRules(); refreshScali(); await recomputeAll(); render(); } return; }
           if (t.dataset.scdel) { delete RULES.navi.scali[t.dataset.scdel]; saveRules(); refreshScali(); await recomputeAll(); render(); return; }
@@ -4523,7 +4982,8 @@ const GEN = (() => {
     }
     const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
     on('gen-mail', () => importFromMail());
-    if (!MS_CFG.clientId) { const mb = document.getElementById('gen-mail'); if (mb) mb.style.display = 'none'; }
+    on('gen-onedrive', () => importFromOneDrive());
+    if (!MS_CFG.clientId) { for (const id of ['gen-mail', 'gen-onedrive']) { const mb = document.getElementById(id); if (mb) mb.style.display = 'none'; } }
     on('gen-export', () => exportGenerale());
     on('gen-export-scali', () => exportScali());
     on('gen-clear', async () => { if (confirm('Svuotare tutta la memoria generale?')) { await dbClear(); await recomputeAll(); render(); } });
