@@ -3443,6 +3443,7 @@ const GEN = (() => {
       t2ImbarcoMin:15, t2SbarcoIgnoreThreshold:true,
       t2Carriers:['U2'],   // vettori i cui voli arrivano/partono sempre dal Terminal 2 MXP (es. easyJet U2)
       fineTurnoAfterMin:0,   // FINE TURNO = STD più tardi del turno + questi minuti
+      groupSbarco:true,   // SBARCO: unisce in una riga i voli dello stesso turno (stesso orario bus): numeri uniti con /, PAX sommati
       portByScalo:{ FCO:'CIVITAVECCHIA' },   // porto per scalo (prioritario; es. Roma = Civitavecchia)
       portByNave:{ SMERALDA:'SVN', FASCINOSA:'SVN', PACIFICA:'SVN', DIADEMA:'SVN', FAVOLOSA:'SVN', TOSCANA:'GOA', FORTUNA:'SVN' },   // porto del nord per nave (SVN Savona / GOA Genova)
       // valori usati quando uno scalo non ne definisce uno proprio
@@ -3457,8 +3458,8 @@ const GEN = (() => {
                tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'13:00',
                sbarcoTimes:[{untilMin:900,t:'11:00'},{t:'13:00'}] },
         FCO: { thrImbarco:20, thrSbarco:20, imbConvOffset:0, imbAddettoBefore:30, stdAfterImbarco:60, sbConvOffset:0, sbAddettoBefore:30, stdAfterSbarco:30,
-               tptImbConv:'11:30', tptImbPart:'12:00', tptSbarco:'11:00',
-               sbarcoTimes:[{untilMin:750,t:'10:30'},{untilMin:960,t:'11:00'},{untilMin:1080,t:'13:30'},{t:'15:30'}] }
+               tptImbConv:'12:00', tptImbPart:'13:00', tptSbarco:'11:00',
+               sbarcoTimes:[{untilMin:820,t:'10:30'},{untilMin:960,t:'11:00'},{untilMin:1080,t:'13:30'},{t:'15:30'}] }
       }
     },
     charter: {
@@ -4016,6 +4017,37 @@ const GEN = (() => {
   // Palette Costa (condivisa)
   const PAL = { BLUE: 'FF1E4F8C', BLUE2: 'FF2E6BB0', LINE: 'FFD9E2EF', YEL: 'FFFDEFC9', YELB: 'FFC68A12', INK: 'FF0D2238', ZEBRA: 'FFF7F9FC' };
   const GEN_WIDTHS = [12, 7, 14, 7, 16, 18, 12, 13, 9, 9, 12, 6, 12, 12, 12, 12, 24, 10, 11, 14, 14, 18, 14, 8];
+  // Regroupement SBARCO (NAVI, sens P): i voli dello stesso turno (stesso orario:
+  // inizio+convocazione+std) diventano UNA riga. Numeri uniti con / (TPT per primo), PAX sommati.
+  function mergeSbarcoRows(recs) {
+    if (RULES.navi.groupSbarco === false) return recs.slice();
+    const map = new Map(), out = [];
+    for (const r of recs) {
+      const naviSbarco = r.sens === 'P' && (!r.modo || r.modo === 'NAVI');
+      if (!naviSbarco) { out.push(r); continue; }
+      const k = [r.data, String(r.nave).toUpperCase(), String(r.scalo).toUpperCase(),
+        r.inizioTurno || '', r.convocazione || '', r.std || '', r.destinazione || ''].join('|');
+      let c = map.get(k);
+      if (!c) { c = { ...r, _volos: [r.volo], passeggeri: [...(r.passeggeri || [])] }; map.set(k, c); out.push(c); }
+      else {
+        c.pax += r.pax; c.transitoPax = (c.transitoPax || 0) + (r.transitoPax || 0);
+        c.wheelchairPax = (c.wheelchairPax || 0) + (r.wheelchairPax || 0);
+        if (r.wheelchair) c.wheelchair = true;
+        c.assistenza = c.assistenza || r.assistenza;
+        c._volos.push(r.volo);
+        if (r.passeggeri) c.passeggeri.push(...r.passeggeri);
+      }
+    }
+    for (const c of out) {
+      if (!c._volos) continue;
+      const vs = [...new Set(c._volos.map(v => cleanVolo(v)).filter(v => v && v !== 'N/D'))];
+      vs.sort((a, b) => (/^TPT/i.test(a) ? 0 : 1) - (/^TPT/i.test(b) ? 0 : 1));   // TPT per primo
+      c.volo = vs.length ? vs.join('/') : (c.volo || 'N/D');
+      c.turnoLead = true; c.turnoPax = c.pax;
+      delete c._volos;
+    }
+    return out;
+  }
   function writeGenSheet(ws, recs, title) {
     const { BLUE, BLUE2, LINE, YEL, YELB, INK, ZEBRA } = PAL;
     const thin = { style: 'thin', color: { argb: LINE } };
@@ -4035,7 +4067,7 @@ const GEN = (() => {
       c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLUE } };
       c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = box; });
-    const sorted = recs.slice().sort((a, b) =>
+    const sorted = mergeSbarcoRows(recs).sort((a, b) =>
       a.data.localeCompare(b.data) || String(a.scalo).localeCompare(String(b.scalo)) ||
       a.sens.localeCompare(b.sens) || ((toMin(a.std) ?? 1e9) - (toMin(b.std) ?? 1e9)));
     const CENTER = new Set([2, 4, 7, 8, 9, 10, 11, 12, 24]);
@@ -4794,6 +4826,7 @@ const GEN = (() => {
         chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
         chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
         chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
+        chk('navi.groupSbarco', 'SBARCO: unisci in una riga i voli dello stesso turno (numeri uniti con /, PAX sommati)') +
         `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}<span class="help" title="Gli orari (inizio addetto, STD imbarco/sbarco) si impostano per scalo in « Configurazione per scalo ».">?</span></div>` +
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Vettori sempre al Terminal 2 MXP (codici, separati da virgola)${hb('I voli di questi vettori sono trattati come T2 Malpensa anche senza T2 nel testo. Es. U2 = easyJet.')}<br><input type="text" data-r="navi.t2Carriers" value="${escapeHtml((R.navi.t2Carriers || []).join(', '))}" style="width:260px;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
