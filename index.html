@@ -4769,6 +4769,82 @@ const GEN = (() => {
     return bar + cards + `<div style="margin-top:8px"><input id="gen-newscalo" type="text" placeholder="CODICE (es. BLQ)" style="width:150px;padding:6px 9px;border:1px solid var(--line);border-radius:7px"><button id="gen-addscalo" class="browse" style="margin-left:6px;padding:6px 13px">+ Aggiungi scalo</button></div>`;
   }
 
+  // ---- Assistente guidato: configura uno scalo passo per passo ----
+  function openScaloWizard(onDone) {
+    const d = RULES.navi.default || {};
+    const scali = RULES.navi.scali || (RULES.navi.scali = {});
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,29,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto';
+    const inStyle = 'padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:13px;font-variant-numeric:tabular-nums';
+    const step = (n, t, sub, body) => `<div style="margin:0 0 15px"><div style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${n}</span><span style="font-weight:700;font-size:13px">${t}</span></div><div style="font-size:11px;color:var(--ink-mute);margin:2px 0 7px 30px">${sub}</div><div style="margin-left:30px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">${body}</div></div>`;
+    const box = document.createElement('div');
+    box.style.cssText = 'max-width:540px;width:100%;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)';
+    const existing = Object.keys(scali).sort();
+    box.innerHTML =
+      `<div style="font-size:17px;font-weight:800;color:var(--blue-darker)">Configurazione guidata</div>
+       <div style="font-size:11.5px;color:var(--ink-mute);margin:3px 0 16px">Imposta un aeroporto passo per passo. Potrai modificare tutto dopo.</div>` +
+      step('1', 'Quale scalo?', 'Scegline uno esistente o scrivi un nuovo codice (es. BLQ).',
+        `<select id="wz-pick" style="${inStyle}"><option value="">— nuovo —</option>${existing.map(c => `<option>${c}</option>`).join('')}</select>
+         <input id="wz-code" type="text" placeholder="CODICE" value="" style="${inStyle};width:120px;text-transform:uppercase">`) +
+      step('2', 'Soglie PAX', 'Da quanti passeggeri lo scalo richiede un assistente.',
+        `IMBARCO <input id="wz-thri" type="number" value="${d.thrImbarco}" style="${inStyle};width:72px"> &nbsp; SBARCO <input id="wz-thrs" type="number" value="${d.thrSbarco}" style="${inStyle};width:72px">`) +
+      step('3', 'Orari bus allo sbarco', 'Per fascia: i voli che partono entro un orario prendono un bus. Riga senza « fino alle » = « oltre ».',
+        `<div style="width:100%"><div id="wz-fasce"></div><button id="wz-addf" type="button" class="browse" style="margin:6px 0 0;padding:4px 10px">+ fascia</button></div>`) +
+      step('4', 'Transfer TPT (facoltativo)', 'Orari fissi dei bus TPT (porto ↔ aeroporto). Lascia vuoto se non serve.',
+        `conv <input id="wz-tc" type="text" placeholder="HH:MM" style="${inStyle};width:72px"> part <input id="wz-tp" type="text" placeholder="HH:MM" style="${inStyle};width:72px"> bus <input id="wz-tb" type="text" placeholder="HH:MM" style="${inStyle};width:72px">`) +
+      step('5', 'Porto (facoltativo)', 'Solo per forzare la destinazione; di norma è letta dalla lista (colonna PRT).',
+        `<input id="wz-port" type="text" placeholder="es. CIV o Civitavecchia" style="${inStyle};width:240px;text-transform:uppercase">`) +
+      `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+         <button id="wz-cancel" type="button" class="clear-all-btn" style="padding:7px 13px">Annulla</button>
+         <button id="wz-save" type="button" class="browse" style="margin:0;padding:7px 16px">Salva scalo</button></div>`;
+    ov.appendChild(box); document.body.appendChild(ov);
+    const close = () => { try { document.body.removeChild(ov); } catch (e) {} };
+    const fasceBox = box.querySelector('#wz-fasce');
+    let fasce = [];
+    const renderFasce = () => {
+      fasceBox.innerHTML = fasce.map((f, i) => `<div style="display:flex;gap:6px;align-items:center;margin:3px 0">fino alle
+        <input data-fi="${i}" data-fk="u" type="text" placeholder="oltre" value="${f.u || ''}" style="${inStyle};width:72px"> → bus
+        <input data-fi="${i}" data-fk="t" type="text" placeholder="HH:MM" value="${f.t || ''}" style="${inStyle};width:72px">
+        <button data-fdel="${i}" type="button" class="clear-all-btn" style="padding:2px 7px">✕</button></div>`).join('');
+    };
+    const prefill = (code) => {
+      const c = scali[code];
+      box.querySelector('#wz-code').value = code || '';
+      box.querySelector('#wz-thri').value = c && c.thrImbarco != null ? c.thrImbarco : d.thrImbarco;
+      box.querySelector('#wz-thrs').value = c && c.thrSbarco != null ? c.thrSbarco : d.thrSbarco;
+      box.querySelector('#wz-tc').value = c ? (c.tptImbConv || '') : '';
+      box.querySelector('#wz-tp').value = c ? (c.tptImbPart || '') : '';
+      box.querySelector('#wz-tb').value = c ? (c.tptSbarco || '') : '';
+      box.querySelector('#wz-port').value = (RULES.navi.portByScalo || {})[code] || '';
+      fasce = c ? (c.sbarcoTimes || []).map(e => ({ u: e.untilMin != null ? hhmm(e.untilMin) : '', t: e.t || '' })) : [];
+      if (!fasce.length) fasce = [{ u: '', t: '' }];
+      renderFasce();
+    };
+    prefill('');
+    box.querySelector('#wz-pick').addEventListener('change', e => prefill(e.target.value));
+    fasceBox.addEventListener('input', e => { const t = e.target; if (t.dataset.fi == null) return; fasce[+t.dataset.fi][t.dataset.fk] = t.value; });
+    fasceBox.addEventListener('click', e => { const t = e.target; if (t.dataset.fdel != null) { fasce.splice(+t.dataset.fdel, 1); if (!fasce.length) fasce = [{ u: '', t: '' }]; renderFasce(); } });
+    box.querySelector('#wz-addf').addEventListener('click', () => { fasce.push({ u: '', t: '' }); renderFasce(); });
+    box.querySelector('#wz-cancel').addEventListener('click', close);
+    box.querySelector('#wz-save').addEventListener('click', async () => {
+      const code = (box.querySelector('#wz-code').value || '').trim().toUpperCase();
+      if (!code) { box.querySelector('#wz-code').focus(); return; }
+      const c = clone(RULES.navi.default);
+      c.thrImbarco = +box.querySelector('#wz-thri').value || d.thrImbarco;
+      c.thrSbarco = +box.querySelector('#wz-thrs').value || d.thrSbarco;
+      c.tptImbConv = box.querySelector('#wz-tc').value.trim();
+      c.tptImbPart = box.querySelector('#wz-tp').value.trim();
+      c.tptSbarco = box.querySelector('#wz-tb').value.trim();
+      c.sbarcoTimes = fasce.filter(f => (f.t || '').trim()).map(f => (f.u || '').trim() ? { untilMin: toMin(f.u), t: f.t.trim() } : { t: f.t.trim() });
+      c.sbarcoTimes.sort((a, b) => (a.untilMin == null ? 1 : b.untilMin == null ? -1 : a.untilMin - b.untilMin));
+      RULES.navi.scali[code] = c;
+      const port = (box.querySelector('#wz-port').value || '').trim().toUpperCase();
+      RULES.navi.portByScalo = RULES.navi.portByScalo || {};
+      if (port) RULES.navi.portByScalo[code] = port; else delete RULES.navi.portByScalo[code];
+      saveRules(); close(); if (onDone) onDone(); await recomputeAll(); render();
+    });
+  }
+
   function setPath(obj, path, val) { const ks = path.split('.'); let o = obj; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]] = o[ks[i]] || {}; o[ks[ks.length - 1]] = val; }
   function getPath(obj, path) { return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj); }
   function advancedEditorHtml() {
@@ -4828,19 +4904,20 @@ const GEN = (() => {
        <span style="width:120px;font-size:12px">${escapeHtml(s)}</span>
        <select data-ship="${s}" style="padding:4px;border:1px solid var(--line);border-radius:6px"><option ${m === 'NAVI' ? 'selected' : ''}>NAVI</option><option ${m === 'CHARTER' ? 'selected' : ''}>CHARTER</option><option ${m === 'NORMALE' ? 'selected' : ''}>NORMALE</option></select>
        <button data-shipdel="${s}" class="clear-all-btn" style="padding:2px 7px">✕</button></div>`).join('');
-    const sec = (t, b) => `<details class="filter-section"><summary class="fs-label" style="cursor:pointer">${t}</summary><div style="margin-top:10px">${b}</div></details>`;
+    const sec = (t, b, lvl) => `<details class="filter-section" data-lvl="${lvl || 'expert'}"><summary class="fs-label" style="cursor:pointer">${t}${lvl === 'base' ? '' : ' <span style="font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--ink-mute);border:1px solid var(--line);border-radius:999px;padding:1px 6px;vertical-align:middle">ESPERTO</span>'}</summary><div style="margin-top:10px">${b}</div></details>`;
     return [
-      sec('NAVI — regole generali',
-        chk('navi.tptImbarcoAlways', 'TPT imbarco: sempre assistito') +
-        chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT sbarco: assistere solo se nel bus ci sono anche voli') +
-        chk('navi.t2SbarcoIgnoreThreshold', 'T2 MXP sbarco: sempre assistito (ignora soglia)') +
+      sec('NAVI — assistenza e porti',
+        `<div style="font-size:11px;color:var(--ink-mute);margin:-2px 0 9px;line-height:1.4">Regole di tutti i giorni per le navi (liste transfer). Gli orari dei bus si impostano per scalo qui sotto.</div>` +
+        chk('navi.tptImbarcoAlways', 'TPT in imbarco: sempre assistito') +
+        chk('navi.tptSbarcoOnlyIfSharedFlight', 'TPT in sbarco: assistere solo se nel bus ci sono anche voli') +
+        chk('navi.t2SbarcoIgnoreThreshold', 'Terminal 2 Malpensa in sbarco: sempre assistito') +
         chk('navi.groupSbarco', 'SBARCO: unisci in una riga i voli dello stesso turno (numeri uniti con /, PAX sommati)') +
-        `<div style="margin-top:6px">${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}<span class="help" title="Gli orari (inizio addetto, STD imbarco/sbarco) si impostano per scalo in « Configurazione per scalo ».">?</span></div>` +
+        `<div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto di DESTINAZIONE forzato per scalo</div><div style="font-size:11px;color:var(--ink-mute);margin:1px 0 4px">Di norma il porto è già letto dalla lista (colonna PRT). Usa questo solo per forzarlo.</div>${portRowsFor('scalo', R.navi.portByScalo)}` +
+        `<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto di DESTINAZIONE forzato per nave</div>${portRowsFor('nave', R.navi.portByNave)}`, 'base'),
+      sec('NAVI — regolazioni avanzate',
+        `<div>${numr('navi.t2ImbarcoMin', 'T2 MXP imbarco: min PAX')}${numr('navi.splitGapMin', 'Spezza turno se distanza voli > (min)')}${numr('navi.fineTurnoAfterMin', 'Fine turno = STD max + (min)')}<span class="help" title="Gli orari (inizio addetto, STD imbarco/sbarco) si impostano per scalo in « Configurazione per scalo ».">?</span></div>` +
         `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Navi « fuori d'Italia » (separate da virgola)${hb('Navi per cui vale la regola soglia + raggruppamento ≤60 min + split ≥2 h. Le altre navi seguono la regola « in Italia ».')}<br><input type="text" data-r="navi.foreignShips" value="${escapeHtml((R.navi.foreignShips || []).join(', '))}" style="width:100%;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
-        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Vettori sempre al Terminal 2 MXP (codici, separati da virgola)${hb('I voli di questi vettori sono trattati come T2 Malpensa anche senza T2 nel testo. Es. U2 = easyJet.')}<br><input type="text" data-r="navi.t2Carriers" value="${escapeHtml((R.navi.t2Carriers || []).join(', '))}" style="width:260px;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>` +
-        `<div style="margin-top:8px">${numr('navi.fineTurnoAfterMin', 'Fine turno = STD max del turno + (min)')}</div>` +
-        `<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto per scalo (DESTINAZIONE; prioritario)</div>${portRowsFor('scalo', R.navi.portByScalo)}` +
-        `<div style="margin-top:6px;font-size:11px;font-weight:700;color:var(--ink-mute)">Porto per nave (nord: SVN Savona / GOA Genova)</div>${portRowsFor('nave', R.navi.portByNave)}`),
+        `<label style="display:block;font-size:11px;color:var(--ink-soft);margin-top:8px">Vettori sempre al Terminal 2 MXP (codici, separati da virgola)${hb('I voli di questi vettori sono trattati come T2 Malpensa anche senza T2 nel testo. Es. U2 = easyJet.')}<br><input type="text" data-r="navi.t2Carriers" value="${escapeHtml((R.navi.t2Carriers || []).join(', '))}" style="width:260px;margin-top:3px;padding:5px;border:1px solid var(--line);border-radius:7px"></label>`, 'expert'),
       flightSec('charter', c, 'CHARTER (voli charter)'),
       flightSec('normale', R.normale, 'NORMALE (voli di linea)'),
       sec('Voli → metier (per numero PAX)',
@@ -4864,7 +4941,7 @@ const GEN = (() => {
         `<button id="gen-rules-export" class="browse" style="margin:0;padding:5px 12px">Esporta regole (file)</button>` +
         `<button id="gen-rules-import" class="browse" style="margin:0 0 0 6px;padding:5px 12px">Importa regole (file)</button>` +
         `<button id="gen-rules-default" class="clear-all-btn" style="margin-left:6px">Ripristina default</button>` +
-        `<input id="gen-rules-import-file" type="file" accept=".json" style="display:none">`)
+        `<input id="gen-rules-import-file" type="file" accept=".json" style="display:none">`, 'base')
     ].join('');
   }
 
@@ -4926,8 +5003,28 @@ const GEN = (() => {
       if (host && !document.getElementById('gen-rules-box')) {
         const det = document.createElement('details'); det.id = 'gen-rules-box'; det.style.marginTop = '12px';
         const dsum = document.createElement('summary'); dsum.style.cssText = 'cursor:pointer;font-size:12px;font-weight:700;color:var(--blue)';
-        dsum.textContent = 'Regole avanzate — NAVI, CHARTER, tipi aereo, navi→metier';
-        const dwrap = document.createElement('div'); det.appendChild(dsum); det.appendChild(dwrap); host.appendChild(det);
+        dsum.textContent = 'Tutte le regole';
+        const dwrap = document.createElement('div'); det.open = true; det.appendChild(dsum); det.appendChild(dwrap); host.appendChild(det);
+        // ── Barra modalità (Facile / Esperto) + configurazione guidata ──
+        if (!document.getElementById('gen-mode-style')) { const st = document.createElement('style'); st.id = 'gen-mode-style'; st.textContent = '.filter-section[data-genmode="facile"] [data-lvl="expert"]{display:none!important}'; document.head.appendChild(st); }
+        const segBase = 'border:none;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;';
+        const bar = document.createElement('div'); bar.id = 'gen-settings-bar';
+        bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px';
+        bar.innerHTML = `<div style="display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden">
+            <button id="gm-facile" type="button">Facile</button><button id="gm-esperto" type="button">Esperto</button></div>
+          <button id="gm-wizard" type="button" class="browse" style="margin:0;padding:6px 13px">&#9656; Configurazione guidata</button>
+          <span id="gm-hint" style="font-size:10.5px;color:var(--ink-mute)"></span>`;
+        host.insertBefore(bar, det);
+        let genMode = 'facile'; try { genMode = localStorage.getItem('gen_settings_mode') || 'facile'; } catch (e) {}
+        const applyGenMode = (m) => { genMode = m; try { localStorage.setItem('gen_settings_mode', m); } catch (e) {}
+          host.setAttribute('data-genmode', m);
+          const f = bar.querySelector('#gm-facile'), ex = bar.querySelector('#gm-esperto');
+          f.setAttribute('style', segBase + (m === 'facile' ? 'background:var(--blue);color:#fff' : 'background:transparent;color:var(--ink-soft)'));
+          ex.setAttribute('style', segBase + (m === 'esperto' ? 'background:var(--blue);color:#fff' : 'background:transparent;color:var(--ink-soft)'));
+          bar.querySelector('#gm-hint').textContent = m === 'facile' ? 'Solo le impostazioni di tutti i giorni.' : 'Tutte le impostazioni (charter, filtri, API…).'; };
+        bar.querySelector('#gm-facile').addEventListener('click', () => applyGenMode('facile'));
+        bar.querySelector('#gm-esperto').addEventListener('click', () => applyGenMode('esperto'));
+        bar.querySelector('#gm-wizard').addEventListener('click', () => openScaloWizard(() => { refreshScali(); refreshAdv(); }));
         const syncTop = () => { gi.value = RULES.navi.default.thrImbarco; gs.value = RULES.navi.default.thrSbarco; ggi.value = RULES.navi.gapImbarco; ggs.value = RULES.navi.gapSbarco; };
         const refreshAll = () => { try { applyFilterCfg(RULES.filters); } catch (e) {} dwrap.innerHTML = advancedEditorHtml(); if (scaliWrap) scaliWrap.innerHTML = scaliEditorHtml(); syncTop(); };
         const refreshAdv = () => { dwrap.innerHTML = advancedEditorHtml(); };
@@ -4995,6 +5092,7 @@ const GEN = (() => {
         scaliWrap = document.createElement('div'); sbox.appendChild(ssum); sbox.appendChild(scaliWrap); host.appendChild(sbox);
         const refreshScali = () => { scaliWrap.innerHTML = scaliEditorHtml(); };
         refreshScali();
+        applyGenMode(genMode);
         scaliWrap.addEventListener('change', async e => {
           const t = e.target;
           if (t.id === 'gen-scali-xlsx-file') { const f = t.files[0];
