@@ -3857,6 +3857,7 @@ const GEN = (() => {
         const cm = toMin(x.std); const conv = cm != null ? cm - Math.round(rule.h * 60) : null;
         x.convocazione = conv != null ? hhmm(conv) : '';
         x.inizioTurno = conv != null ? hhmm(conv - rule.pre) : '';
+        x.fineTurno = x.std || '';   // fine turno = decollo del volo
         x.note = 'CONV ' + cat;
       }
     }
@@ -3902,7 +3903,7 @@ const GEN = (() => {
     const _fo = +RULES.navi.fineTurnoAfterMin || 0;
     const _stds = cl.map(x => toMin(x.std)).filter(v => v != null);
     const _fine = _stds.length ? hhmm(Math.max(..._stds) + _fo) : '';
-    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; x.fineTurno = (i === 0) ? _fine : ''; });
+    cl.forEach((x, i) => { x.assistenza = assist; x.turnoPax = sum; x.turnoLead = (i === 0); x.turnoStart = x.std || ''; x.fineTurno = _fine; });
   }
   function computeEngine(recs) {
     const auto = recs.filter(r => !r.manual);  // le righe modificate a mano non vengono ricalcolate
@@ -3926,8 +3927,8 @@ const GEN = (() => {
       if (cl.length) clusters.push(cl);
       for (const cluster of clusters) { if (flightCfg) computeFlights(cluster, flightCfg); else computeNavi(cluster, sens); }
     }
-    // FINE TURNO ADDETTO: non si conosce ancora → sempre vuota (compilata a mano).
-    for (const r of auto) { r.fineTurno = ''; r.turnoEnd = ''; }
+    // FINE TURNO ADDETTO: calcolata (fine del turno); resta modificabile a mano.
+    for (const r of auto) { r.turnoEnd = r.fineTurno || ''; }
   }
   async function recomputeAll() {
     const all = await dbAll();
@@ -4094,7 +4095,8 @@ const GEN = (() => {
       if (r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;      // ogni riga
       if (r.convocazione) ws.getCell(row, 8).value = r.convocazione;    // ogni riga
       ws.getCell(row, 9).value = r.std || '';
-      // FINE TURNO ADDETTO (col K) e FASCIA + EXTRA ORA (col Q) : lasciate VUOTE, compilate a mano.
+      if (r.fineTurno) ws.getCell(row, 11).value = r.fineTurno;   // FINE TURNO ADDETTO (col K), ogni riga
+      // FASCIA + EXTRA ORA (col Q) : lasciata VUOTA, compilata a mano.
       ws.getCell(row, 12).value = r.pax;
       if (r.assistenza && r.turnoLead) {
         ws.getCell(row, 13).value = '1 ASSISTENTE';
