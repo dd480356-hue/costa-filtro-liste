@@ -1344,6 +1344,12 @@ const ITALIAN_AIRPORTS = new Set([
 const AIRPORT_TO_PORT = {
   LIN: 'Savona/Genova', MXP: 'Savona/Genova', FCO: 'Civitavecchia',
 };
+// Codice porto (colonna PRT delle liste Costa) → nome porto. Fallback = codice.
+const PORT_NAMES = {
+  CIV:'Civitavecchia', SVN:'Savona', GOA:'Genova', TRS:'Trieste', VCE:'Venezia',
+  NAP:'Napoli', BRI:'Bari', PMO:'Palermo', CAG:'Cagliari', OLB:'Olbia', BLQ:'Bologna',
+  BCN:'Barcellona', MRS:'Marsiglia', HAM:'Amburgo', SYD:'Sydney',
+};
 
 const FILE_TYPES = {
   FLT_PRE: 'Flight List PRE',  FLT_POST: 'Flight List POST',
@@ -1711,7 +1717,8 @@ function filterFlightListPre(rows) {
       for (const esc of escali) {
         out.push(withLegCols({
           'Aéroport': esc,
-          'Porto':    AIRPORT_TO_PORT[esc] || '',
+          // Porto = valore reale PRT della lista (varia per crociera); fallback = mappa statica scalo→porto.
+          'Porto':    row['Prt'] || AIRPORT_TO_PORT[esc] || '',
           'Lastname': row['Lastname'],
           'Firstname': row['Firstname'],
           'Age':      row['Age'],
@@ -3902,7 +3909,8 @@ const GEN = (() => {
     for (const r of auto) { r.assistenza = false; r.turnoPax = r.pax; r.turnoLead = true;
       r.turnoStart = r.std || ''; r.turnoEnd = r.std || ''; r.inizioTurno = ''; r.convocazione = ''; r.fineTurno = ''; r.sbarco = ''; r.note = '';
       const _port = r.prt || (RULES.navi.portByScalo || {})[String(r.scalo).toUpperCase()] || (RULES.navi.portByNave || {})[String(r.nave).toUpperCase()] || '';
-      r.destinazione = _port ? ((r.sens === 'P' ? 'SBARCO ' : '') + _port) : (r.sens === 'P' ? 'SBARCO' : ''); }
+      const _pn = _port ? (PORT_NAMES[String(_port).toUpperCase()] || _port) : '';
+      r.destinazione = _pn ? ((r.sens === 'P' ? 'SBARCO ' : '') + _pn) : (r.sens === 'P' ? 'SBARCO' : ''); }
     const groups = new Map();
     for (const r of auto) { const g = r.data + '|' + String(r.scalo).toUpperCase() + '|' + r.sens + '|' + (r.modo || '');
       if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
