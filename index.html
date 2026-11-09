@@ -4062,15 +4062,16 @@ const GEN = (() => {
     const thin = { style: 'thin', color: { argb: LINE } };
     const box = { top: thin, bottom: thin, left: thin, right: thin };
     GEN_WIDTHS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-    const HROW = 4;  // riga intestazione tabella
+    const HROW = 18;  // intestazione tabella alla riga 18 (come il file di riferimento)
+    // Legenda AEROPORTO in colonna A (verticale), come il file di riferimento
     const apts = [...new Set(recs.map(r => String(r.scalo).toUpperCase()))].sort();
-    ws.mergeCells('A1:H1');
-    const ttl = ws.getCell('A1'); ttl.value = 'GENERALE ASSISTENZE · ' + title;
-    ttl.font = { bold: true, size: 14, color: { argb: BLUE } }; ttl.alignment = { vertical: 'middle' };
-    ws.getRow(1).height = 22;
-    ws.mergeCells('A2:H2');
-    const lg = ws.getCell('A2'); lg.value = 'AEROPORTI: ' + apts.join(' · ');
-    lg.font = { bold: true, size: 11, color: { argb: INK } };
+    const lc = ws.getCell('A1'); lc.value = 'AEROPORTO';
+    lc.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    lc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLUE } };
+    lc.alignment = { horizontal: 'center', vertical: 'middle' }; lc.border = box;
+    apts.forEach((a, i) => { const c = ws.getCell(2 + i, 1); c.value = a;
+      c.font = { bold: true, size: 10, color: { argb: INK } };
+      c.alignment = { horizontal: 'center' }; c.border = box; });
     const hr = ws.getRow(HROW); hr.height = 34;
     GEN_COLS.forEach((h, i) => { const c = ws.getCell(HROW, i + 1); c.value = h;
       c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -4095,13 +4096,13 @@ const GEN = (() => {
       if (r.inizioTurno) ws.getCell(row, 7).value = r.inizioTurno;      // ogni riga
       if (r.convocazione) ws.getCell(row, 8).value = r.convocazione;    // ogni riga
       ws.getCell(row, 9).value = r.std || '';
-      if (r.fineTurno) ws.getCell(row, 11).value = r.fineTurno;   // FINE TURNO ADDETTO (col K), ogni riga
+      // DECOLLO (col J) e FINE TURNO ADDETTO (col K) : lasciate VUOTE, compilate a mano (come il file di riferimento).
       // FASCIA + EXTRA ORA (col Q) : lasciata VUOTA, compilata a mano.
       ws.getCell(row, 12).value = r.pax;
       if (r.assistenza && r.turnoLead) {
         ws.getCell(row, 13).value = '1 ASSISTENTE';
         // Volo misto, 1 solo addetto: STAFF 2 = numero pax in transito + dicitura
-        if (r.transitoPax > 0) ws.getCell(row, 14).value = r.transitoPax + ' TRANSITO';
+        if (r.transitoPax > 0) ws.getCell(row, 14).value = r.transitoPax + ' PAX I TRANSITO';
         if (r.note) ws.getCell(row, 22).value = r.note;
       }
       const rowFill = r.assistenza ? YEL : (zeb ? ZEBRA : null);
@@ -4153,13 +4154,14 @@ const GEN = (() => {
     const recs = ALL.filter(r => selSet.has(String(r.scalo).toUpperCase()));
     if (!recs.length) { alert('Nessuna riga per gli scali scelti.'); return; }
     const wb = new ExcelJS.Workbook(); wb.creator = 'Filtro Liste — Generale';
-    const views = [{ state: 'frozen', ySplit: 4 }];
-    // Feuille TUTTI (solo scali selezionati)
-    writeGenSheet(wb.addWorksheet('TUTTI', { views }), recs, sel.length === allScali.length ? 'TUTTI GLI SCALI' : 'SCALI: ' + sel.join(' · '));
-    // Une feuille par aéroport (selezionati)
-    const byScalo = new Map();
-    for (const r of recs) { const k = String(r.scalo).toUpperCase(); if (!byScalo.has(k)) byScalo.set(k, []); byScalo.get(k).push(r); }
-    for (const k of [...byScalo.keys()].sort()) writeGenSheet(wb.addWorksheet(k.slice(0, 31), { views }), byScalo.get(k), k);
+    const views = [{ state: 'frozen', ySplit: 18 }];
+    // Un foglio per SETTIMANA (sab–ven), come il file di riferimento
+    const byWeek = new Map();
+    for (const r of recs) { const nm = sheetName(r.data); if (!byWeek.has(nm)) byWeek.set(nm, { sat: weekSat(r.data), recs: [] }); byWeek.get(nm).recs.push(r); }
+    const weeks = [...byWeek.entries()].sort((a, b) => a[1].sat - b[1].sat);
+    const used = new Set();
+    for (const [nm, wk] of weeks) { let sn = nm.slice(0, 31).replace(/[\\/?*\[\]:]/g, '-'); while (used.has(sn)) sn = sn.slice(0, 29) + '~'; used.add(sn);
+      writeGenSheet(wb.addWorksheet(sn, { views }), wk.recs, nm); }
     const buf = await wb.xlsx.writeBuffer();
     dl(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
        'GENERALE_COSTA_' + new Date().toISOString().slice(0, 10) + '.xlsx');
